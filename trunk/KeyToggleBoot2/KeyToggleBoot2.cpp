@@ -22,6 +22,7 @@ INT_PTR CALLBACK	About(HWND, UINT, WPARAM, LPARAM);
 #include "keymap.h"	//the char to vkey mapping
 
 #include "registry.h"
+#define REGKEY L"Software\\Intermec\\KeyToggleBoot"
 
 #define WM_SHOWMYDIALOG WM_USER + 5241
 
@@ -29,7 +30,7 @@ UINT  matchTimeout = 3000;  //if zero, no autofallback
 
 HINSTANCE	g_hHookApiDLL	= NULL;			// Handle to loaded library (system DLL where the API is located)
 
-TCHAR szAppName[] = L"KeyToggleBoot2 v1.0";
+TCHAR szAppName[] = L"KeyToggleBoot2 v1.01";
 TCHAR szKeySeq[10]; //hold a max of ten chars
 char szKeySeqA[10]; //same as char list
 
@@ -386,11 +387,11 @@ void WriteReg()
 {
 	DWORD rc=0;
 	DWORD dwVal=0;
-	rc = OpenCreateKey(L"Software\\Intermec\\KeyToggleBoot");
+	rc = OpenCreateKey(REGKEY);
 	if (rc != 0)
 		ShowError(rc);
 
-	if (rc=OpenKey(L"Software\\Intermec\\KeyToggleBoot") != 0)
+	if (rc=OpenKey(REGKEY) != 0)
 		ShowError(rc);
 	
 	//timeout
@@ -430,7 +431,7 @@ int ReadReg()
 	byte dw=0;
 	DWORD dwVal=0;
 
-	OpenKey(L"Software\\Intermec\\KeyToggleBoot");
+	OpenKey(REGKEY);
 	
 	//read the timeout for the StickyKey
 	if (RegReadDword(L"Timeout", &dwVal)==0)
