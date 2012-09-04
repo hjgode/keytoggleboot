@@ -5,6 +5,10 @@
 	Name="KeyToggleBoot"
 	ProjectGUID="{A7346C7D-1EA4-41B9-83CD-D15D0394E3CE}"
 	RootNamespace="KeyToggleBoot"
+	SccProjectName="Svn"
+	SccAuxPath="Svn"
+	SccLocalPath="Svn"
+	SccProvider="SubversionScc"
 	TargetFrameworkVersion="131072"
 	>
 	<Platforms>
@@ -244,7 +248,7 @@
 			/>
 			<DeploymentTool
 				ForceDirty="-1"
-				RemoteDirectory=""
+				RemoteDirectory="\windows"
 				RegisterOutput="0"
 				AdditionalFiles=""
 			/>
@@ -1097,7 +1101,7 @@
 			/>
 			<DeploymentTool
 				ForceDirty="-1"
-				RemoteDirectory=""
+				RemoteDirectory="\windows"
 				RegisterOutput="0"
 				AdditionalFiles=""
 			/>
@@ -2206,6 +2210,10 @@
 					/>
 				</FileConfiguration>
 			</File>
+			<File
+				RelativePath=".\ver_info.cpp"
+				>
+			</File>
 		</Filter>
 		<Filter
 			Name="Header Files"
@@ -2233,6 +2241,10 @@
 			</File>
 			<File
 				RelativePath="StdAfx.h"
+				>
+			</File>
+			<File
+				RelativePath=".\ver_info.h"
 				>
 			</File>
 		</Filter>

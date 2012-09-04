@@ -9,3 +9,5 @@ BOOL CALLBACK RebootDialogProc (
                     LPARAM )  // Second message parameter.
 ;
 
+BOOL writeRegDlg();
+BOOL readRegDlg();
