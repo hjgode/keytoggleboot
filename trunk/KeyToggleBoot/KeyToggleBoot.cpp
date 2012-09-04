@@ -1,0 +1,898 @@
+// KeyToggleBoot.cpp : Defines the entry point for the application.
+//
+
+//history
+//version	change
+/*
+  3.3.1		changed reboot code:
+			BOOL ResetPocketPC()
+			{
+				SetSystemPowerState(NULL, POWER_STATE_RESET, 0);
+				return 0;
+				//DWORD dwRet=0;
+				//return KernelIoControl(IOCTL_HAL_REBOOT, NULL, 0, NULL, 0, &dwRet);
+			}
+			For whatever reason KernelIOCtl does not work anymore
+
+  3.3.0		added code to read button texts from Registry
+				REGEDIT4
+
+				[HKEY_LOCAL_MACHINE\Software\Intermec\KeyToggleBoot]
+				"ForbiddenKeys"=hex:\
+					  00
+				"RebootText"="Neustart"
+				"QuestionText"="Sie haben den Reboot-Dialog geöffnet. Was möchten Sie?"
+				"CancelText"="Abbrechen"
+				"ShutdownText"="Herunterfahren"
+				"SuspendText"="Standby"
+				"KeySeq"="***"
+				"Timeout"=dword:00000003
+				"LEDid"=dword:00000001
+			font in dialog changed to Tahoma 8pt and resized buttons
+			changed registry.h and splitted to registry.h and cpp
+
+  3.2.0		imported to VS2008 and fixed some pointer bugs
+			added Suspend option
+
+  3.1.1		fixed pForbiddenKeyList size recognition by adding 0x00 as end marker
+			cannot use sizeof(pForbiddenKeyList) as this returns size of pointer
+
+  3.1.0		added ForbiddenKeyList to code and registry
+                [HKEY_LOCAL_MACHINE\Software\Intermec\KeyToggleBoot]
+				"KeySeq"=string:"*.#"
+                "LEDid"=dword:00000001
+                "Timeout"=dword:00000003
+				"ForbiddenKeys"=hex:\
+							72,73
+			ForbiddenKeys is a binary list of byte codes. These byte codes define 
+			the VK values to be catched and consumed by KeyToggleBoot
+			in example, the VK code for F3 and F4 is 0x72 and 0x73. So KeyToggleBoot 
+			will not forward these two keys, neither WM_KEYDOWN nor WM_KEYUP will be
+			send.
+
+  3.0.0		first release of coding to KeyToggleBoot
+			added LEDid code
+			LEDid defines the ID of the LED to use for showing sticky state
+                [HKEY_LOCAL_MACHINE\Software\Intermec\KeyToggleBoot]
+				"KeySeq"=string:"*.#"
+                "LEDid"=dword:00000001
+                "Timeout"=dword:00000003
+
+*/
+//	ReportEvent
+
+#include "stdafx.h"
+#include "hooks.h"
+
+#include "resource.h"
+#include  <nled.h>
+#include "keymap.h"	//the char to vkey mapping
+
+#include "registry.h"
+
+#define WM_SHOWMYDIALOG WM_USER + 5241
+#define WM_DESTROYMYDIALOG WM_USER + 5242
+
+#include "rebootdlg.h"
+extern BOOL g_bRebootDialogOpen;
+HWND g_hWnd_RebootDialog=NULL;
+
+
+/*
+*/
+
+UINT  matchTimeout = 3000;  //if zero, no autofallback
+
+TCHAR szAppName[] = L"KeyToggleBoot v3.0";
+TCHAR szKeySeq[10]; //hold a max of ten chars
+char szKeySeqA[10]; //same as char list
+
+char szVKeySeq[10];
+bool bCharShiftSeq[10];
+
+int iKeyCount=3;
+int iMatched=0;
+
+BYTE* pForbiddenKeyList = NULL;
+
+
+LONG FAR PASCAL WndProc (HWND , UINT , UINT , LONG) ;
+int ReadReg();
+void WriteReg();
+
+static bool isStickyOn=false;
+static int tID=1011; //TimerID
+
+NOTIFYICONDATA nid;
+
+// Global variables can still be your...friend.
+HINSTANCE	g_hInstance		= NULL;			// Handle to app calling the hook (me!)
+HINSTANCE	g_hHookApiDLL	= NULL;			// Handle to loaded library (system DLL where the API is located)
+HWND		g_hWnd			= NULL;
+
+//ITC 7xx supports 5 LEDs?
+//using 0 gives slow responsive by left amber LED light
+//using 1 gives slow responsive by left red LED light
+//using 2 gives immediate left red LED light
+//using 3 gives immediate left green LED light
+//using 4 gives slow responsive right green LED light
+
+int LEDid=3; //which LED to use
+
+// Global functions: The original Open Source
+BOOL g_HookDeactivate();
+BOOL g_HookActivate(HINSTANCE hInstance);
+
+//
+void ShowIcon(HWND hWnd, HINSTANCE hInst);
+void RemoveIcon(HWND hWnd);
+
+#pragma data_seg(".HOOKDATA")									//	Shared data (memory) among all instances.
+	HHOOK g_hInstalledLLKBDhook = NULL;						// Handle to low-level keyboard hook
+#pragma data_seg()
+
+#pragma comment(linker, "/SECTION:.HOOKDATA,RWS")		//linker directive
+
+// from the platform builder <Pwinuser.h>
+extern "C" {
+BOOL WINAPI NLedGetDeviceInfo( UINT     nInfoId, void   *pOutput );
+BOOL WINAPI NLedSetDevice( UINT nDeviceId, void *pInput );
+};
+
+//trying to create modal dialog in separate thread *START*
+#define SHOWDLGEVENTNAME L"ShowDlgEvent"
+#define ENDDLGEVENTNAME  L"EndDialogEvent"
+HANDLE handleEventCloseDialog=NULL;
+HANDLE handleEventEndDlgThread=NULL;
+HANDLE hDlgThread=NULL;
+DWORD WINAPI dialogThread(LPVOID lpParam){
+	int iRet=0;
+	HWND hwnd=(HWND)lpParam;
+	BOOL bRun=TRUE;
+	DWORD dwRes=0;
+	HANDLE* pObjects;
+	pObjects=new HANDLE[2];
+	pObjects[0]=handleEventCloseDialog;
+	pObjects[1]=handleEventEndDlgThread;
+	while(bRun){
+		dwRes = WaitForMultipleObjects(
+			2, //number of objects
+			pObjects, //list of objects
+			FALSE,
+			INFINITE); //timeout
+		switch(dwRes){
+			case WAIT_OBJECT_0 + 1://this will be called to end the dlg thread
+				DEBUGMSG(1, (L"dialogThread: WaitMultipleObjects=WAIT_OBJECT_0 + 1\r\n"));
+				bRun=FALSE; //signal exit thread
+				break;
+			case WAIT_OBJECT_0: //used to close the dialog
+				DEBUGMSG(1, (L"dialogThread: WaitMultipleObjects=WAIT_OBJECT_0\r\n"));
+				if(g_hWnd_RebootDialog!=NULL){
+					PostMessage(hwnd, WM_DESTROYMYDIALOG, 0, 0);
+					//HWND hWndDlg=g_hWnd_RebootDialog;
+					//iRet = DestroyWindow(hWndDlg);
+					//DEBUGMSG(1, (L"dialogThread: DestroyWindow return=%i, lastError=%i", iRet, GetLastError()));
+				}
+				break;
+			case WAIT_ABANDONED_0:
+				DEBUGMSG(1, (L"dialogThread: WaitMultipleObjects=WAIT_ABANDONED\r\n"));
+				break;
+			case WAIT_TIMEOUT:
+				DEBUGMSG(1, (L"dialogThread: WaitMultipleObjects=WAIT_TIMEOUT\r\n"));
+				break;
+			case WAIT_FAILED:
+				DEBUGMSG(1, (L"dialogThread: WaitMultipleObjects=WAIT_FAILED\r\n"));
+				break;
+		}
+	}
+	return iRet;
+}
+int startDlgThread(HWND hwnd){
+	int iRet=0;
+
+	DWORD thID=0;
+	hDlgThread = CreateThread(NULL, 0, &dialogThread, (LPVOID) hwnd, 0, &thID);
+	if(hDlgThread==NULL){
+		iRet = -1;
+	}
+	return iRet;
+}
+//trying to create modal dialog in separate thread *END*
+
+//control the LEDs
+void LedOn(int id, int onoff) //onoff=0 LED is off, onoff=1 LED is on
+{
+	TCHAR str[MAX_PATH];
+	wsprintf(str,L"Trying to set LED with ID=%i to state=%i\n", id, onoff);
+	DEBUGMSG(true,(str));
+	/*	
+	struct NLED_COUNT_INFO {
+	  UINT cLeds; 
+	};*/
+	NLED_COUNT_INFO cInfo;
+	memset(&cInfo, 0, sizeof(cInfo));
+	NLedGetDeviceInfo(NLED_COUNT_INFO_ID, &cInfo);
+	if (cInfo.cLeds == 0)
+	{
+		DEBUGMSG(true,(L"NO LEDs supported!"));
+		return;
+	}
+	else
+	{
+		wsprintf(str,L"Device supports %i LEDs\n",cInfo.cLeds);
+		DEBUGMSG(true,(str));
+	}
+
+    NLED_SETTINGS_INFO settings; 
+	memset(&settings, 0, sizeof(settings));
+    settings.LedNum= id;
+	/*	0 Off 
+		1 On 
+		2 Blink */
+    settings.OffOnBlink= onoff;
+    if (!NLedSetDevice(NLED_SETTINGS_INFO_ID, &settings))
+        DEBUGMSG(true,(L"NLedSetDevice(NLED_SETTINGS_INFO_ID) failed\n"));
+	else
+		DEBUGMSG(true,(L"NLedSetDevice(NLED_SETTINGS_INFO_ID) success\n"));
+}
+
+//timer proc which resets isStickyOn after a period
+VOID CALLBACK Timer2Proc(
+                        HWND hWnd, // handle of window for timer messages
+                        UINT uMsg,    // WM_TIMER message
+                        UINT idEvent, // timer identifier
+                        DWORD dwTime  // current system time
+                        )
+
+{
+	DEBUGMSG(1, (L"Timout: MATCH missed. Reseting matching\n"));
+	iMatched = 0;
+	KillTimer(NULL, tID);
+	LedOn(LEDid,0);
+}
+
+// The command below tells the OS that this EXE has an export function so we can use the global hook without a DLL
+__declspec(dllexport) LRESULT CALLBACK g_LLKeyboardHookCallback(
+   int nCode,      // The hook code
+   WPARAM wParam,  // The window message (WM_KEYUP, WM_KEYDOWN, etc.)
+   LPARAM lParam   // A pointer to a struct with information about the pressed key
+) 
+{
+	/*	typedef struct {
+	    DWORD vkCode;
+	    DWORD scanCode;
+	    DWORD flags;
+	    DWORD time;
+	    ULONG_PTR dwExtraInfo;
+	} KBDLLHOOKSTRUCT, *PKBDLLHOOKSTRUCT;*/
+	
+	// Get out of hooks ASAP; no modal dialogs or CPU-intensive processes!
+	// UI code really should be elsewhere, but this is just a test/prototype app
+	// In my limited testing, HC_ACTION is the only value nCode is ever set to in CE
+	static int iActOn = HC_ACTION;
+	static bool isShifted=false;
+
+#ifdef DEBUG
+	static TCHAR str[MAX_PATH];
+#endif
+
+	PKBDLLHOOKSTRUCT pkbhData = (PKBDLLHOOKSTRUCT)lParam;
+	//DWORD vKey;
+	if (nCode == iActOn) 
+	{ 
+		if(g_bRebootDialogOpen){
+			return CallNextHookEx(g_hInstalledLLKBDhook, nCode, wParam, lParam);
+		}
+
+		//only process unflagged keys
+		if (pkbhData->flags != 0x00)
+			return CallNextHookEx(g_hInstalledLLKBDhook, nCode, wParam, lParam);
+		//check vkCode against forbidden key list
+		if(pForbiddenKeyList!=NULL)
+		{
+			BOOL bForbidden=false;
+			int j=0;
+			do{
+				if(pForbiddenKeyList[j]==(BYTE)pkbhData->vkCode)
+				{
+					bForbidden=true;
+					DEBUGMSG(1, (L"suppressing forbidden key: 0x%0x\n",pkbhData->vkCode));
+					continue;
+				}
+				j++;
+			}while(!bForbidden && pForbiddenKeyList[j]!=0x00);
+			if(bForbidden){
+				return true;
+			}
+		}
+
+		SHORT sShifted = GetAsyncKeyState(VK_SHIFT);
+		if((sShifted & 0x800) == 0x800)
+			isShifted = true;
+		else
+			isShifted = false;
+
+#ifdef DEBUG
+			wsprintf(str, L"vkCode=\t0x%0x \n", pkbhData->vkCode);
+			DEBUGMSG(true,(str));
+			wsprintf(str, L"scanCode=\t0x%0x \n", pkbhData->scanCode);
+			DEBUGMSG(true,(str));
+			wsprintf(str, L"flags=\t0x%0x \n", pkbhData->flags);
+			DEBUGMSG(true,(str));
+//			wsprintf(str, L"isStickyOn is=\t0x%0x \n", isStickyOn);
+//			DEBUGMSG(true,(str));
+			wsprintf(str, L"wParam is=\t0x%0x \n", wParam);
+			DEBUGMSG(true,(str));
+			wsprintf(str, L"lParam is=\t0x%0x \n", lParam);
+			DEBUGMSG(true,(str));
+
+			wsprintf(str, L"iMatched is=\t0x%0x \n", iMatched);
+			DEBUGMSG(true,(str));
+
+
+			if(isShifted)
+				DEBUGMSG(true,(L"Shift ON\n"));
+			else
+				DEBUGMSG(true,(L"Shift OFF\n"));
+
+			DEBUGMSG(true,(L"------------------------------\n"));
+#endif
+
+		//check and toggle for Shft Key
+/*
+		if (pkbhData->vkCode == VK_SHIFT){
+			if( wParam==WM_KEYUP ) 
+				isShifted=!isShifted;
+		}
+*/
+		//do not process shift key
+		if (pkbhData->vkCode == VK_SHIFT){
+			DEBUGMSG(1, (L"Ignoring VK_SHIFT\n"));
+			return CallNextHookEx(g_hInstalledLLKBDhook, nCode, wParam, lParam);
+		}
+
+		//################################################################
+		//check if the actual key is a match key including the shift state
+		if ((byte)pkbhData->vkCode == (byte)szVKeySeq[iMatched]){
+			DEBUGMSG(1 , (L"==== char match\n"));
+			if (bCharShiftSeq[iMatched] == isShifted){
+				DEBUGMSG(1 , (L"==== shift match\n"));
+			}
+			else{
+				DEBUGMSG(1 , (L"==== shift not match\n"));
+			}
+		}
+
+		if( wParam == WM_KEYUP ){
+			DEBUGMSG(1, (L"---> szVKeySeq[iMatched] = 0x%02x\n", (byte)szVKeySeq[iMatched]));
+
+			if ( ((byte)pkbhData->vkCode == (byte)szVKeySeq[iMatched]) && (isShifted == bCharShiftSeq[iMatched]) ) {
+					
+				//the first match?
+				if(iMatched==0){
+					//start the timer and lit the LED
+					LedOn(LEDid,1);
+					tID=SetTimer(NULL, 0, matchTimeout, (TIMERPROC)Timer2Proc);
+				}
+				iMatched++;
+
+				DEBUGMSG(1, (L"iMatched is now=%i\n", iMatched));
+				//are all keys matched
+				if (iMatched == iKeyCount){
+					//show modeless dialog
+					DEBUGMSG(1, (L"FULL MATCH, starting ...\n"));
+
+					//show modeless dialog
+					if(!g_bRebootDialogOpen){
+						PostMessage(g_hWnd, WM_SHOWMYDIALOG, 0, 0);
+						//g_hWnd_RebootDialog = CreateDialog(g_hInstance, MAKEINTRESOURCE (IDD_REBOOTDIALOG), g_hWnd, (DLGPROC) RebootDialogProc);
+						//if(g_hWnd_RebootDialog!=NULL){
+						//	ShowWindow(g_hWnd_RebootDialog, SW_SHOW);
+						//	DEBUGMSG(1, (L"dialog created\n"));
+						//	SetWindowPos(g_hWnd_RebootDialog, HWND_TOPMOST, 0,0,0,0, SWP_NOSIZE | SWP_NOMOVE | SWP_SHOWWINDOW);
+						//}
+						//else
+						//	DEBUGMSG(1, (L"\n## could not create dialog. LastError=%i\n\n", GetLastError()));
+					}
+					else
+						DEBUGMSG(1, (L"\n## Reboot dialog already open\n"));
+
+					//reset match pos and stop timer
+					DEBUGMSG(1, (L"FULL MATCH: Reset matching\n"));
+					LedOn(LEDid,0);
+					iMatched=0; //reset match pos
+					KillTimer(NULL, tID);
+					//return CallNextHookEx(g_hInstalledLLKBDhook, nCode, wParam, lParam);
+				}
+				//return -1; //do not forward key?
+			}
+			else
+			{
+				KillTimer(NULL, tID);
+				LedOn(LEDid,0);
+				iMatched=0; //reset match pos
+				DEBUGMSG(1, (L"FULL MATCH missed. Reseting matching\n"));
+			}
+		} //if wParam == WM_KEY..
+	}
+	return CallNextHookEx(g_hInstalledLLKBDhook, nCode, wParam, lParam);
+}
+
+BOOL g_HookActivate(HINSTANCE hInstance)
+{
+	// We manually load these standard Win32 API calls (Microsoft says "unsupported in CE")
+	SetWindowsHookEx		= NULL;
+	CallNextHookEx			= NULL;
+	UnhookWindowsHookEx	= NULL;
+
+	// Load the core library. If it's not found, you've got CErious issues :-O
+	//TRACE(_T("LoadLibrary(coredll.dll)..."));
+	g_hHookApiDLL = LoadLibrary(_T("coredll.dll"));
+	if(g_hHookApiDLL == NULL) return false;
+	else {
+		// Load the SetWindowsHookEx API call (wide-char)
+		//TRACE(_T("OK\nGetProcAddress(SetWindowsHookExW)..."));
+		SetWindowsHookEx = (_SetWindowsHookExW)GetProcAddress(g_hHookApiDLL, _T("SetWindowsHookExW"));
+		if(SetWindowsHookEx == NULL) 
+			return false;
+		else
+		{
+			// Load the hook.  Save the handle to the hook for later destruction.
+			//TRACE(_T("OK\nCalling SetWindowsHookEx..."));
+			g_hInstalledLLKBDhook = SetWindowsHookEx(WH_KEYBOARD_LL, g_LLKeyboardHookCallback, hInstance, 0);
+			if(g_hInstalledLLKBDhook == NULL){
+				DEBUGMSG(1, (L"\n######## SetWindowsHookEx failed, GetLastError=%i\n", GetLastError()));
+				return false;
+			}
+		}
+
+		// Get pointer to CallNextHookEx()
+		//TRACE(_T("OK\nGetProcAddress(CallNextHookEx)..."));
+		CallNextHookEx = (_CallNextHookEx)GetProcAddress(g_hHookApiDLL, _T("CallNextHookEx"));
+		if(CallNextHookEx == NULL) 
+			return false;
+
+		// Get pointer to UnhookWindowsHookEx()
+		//TRACE(_T("OK\nGetProcAddress(UnhookWindowsHookEx)..."));
+		UnhookWindowsHookEx = (_UnhookWindowsHookEx)GetProcAddress(g_hHookApiDLL, _T("UnhookWindowsHookEx"));
+		if(UnhookWindowsHookEx == NULL) 
+			return false;
+	}
+	DEBUGMSG(1, (L"g_HookActivate: OK\nEverything loaded OK\n"));
+	return true;
+}
+
+
+BOOL g_HookDeactivate()
+{
+	//TRACE(_T("Uninstalling hook..."));
+	if(g_hInstalledLLKBDhook != NULL)
+	{
+		UnhookWindowsHookEx(g_hInstalledLLKBDhook);		// Note: May not unload immediately because other apps may have me loaded
+		g_hInstalledLLKBDhook = NULL;
+	}
+
+	//TRACE(_T("OK\nUnloading coredll.dll..."));
+	if(g_hHookApiDLL != NULL)
+	{
+		FreeLibrary(g_hHookApiDLL);
+		g_hHookApiDLL = NULL;
+	}
+	//TRACE(_T("OK\nEverything unloaded OK\n"));
+	return true;
+}
+
+//return shifted of found entry
+bool isShifted(const char* c){
+	for (int i=0x20; i<0x80; i++){
+		if(strncmp(vkTable[i].txt, c, 1)==0){
+			return vkTable[i].kShift;
+		}
+	}
+	return false;
+}
+
+byte getVKcode(const char* c){
+	for (int i=0x20; i<0x80; i++){
+		if(strncmp(vkTable[i].txt, c, 1)==0){
+			return vkTable[i].kVKval;
+		}
+	}
+	return 0;
+}
+
+//helper to convert ANSI char sequence to vkCode sequence and associated shift sequence
+// ie * will have chr code 0x2A BUT vkCode is 0x38 with a VK_SHIFT before
+void initVkCodeSeq(){
+	DEBUGMSG(1, (L"------------ key seq -------------\n"));
+	bool bShift=false;
+	char* c = " ";
+	wchar_t* t = L" ";
+
+	//lookup the chars in szVKeySeq in keymap and fill bShiftSeq and szVKeySeq
+	for(unsigned int i=0; i<strlen(szKeySeqA); i++){
+		//check, if the char needs a shifted VK_Code
+		const char* cIn = &szKeySeqA[i];
+		//strncpy(c, &szKeySeqA[i], 1);
+		bShift = isShifted(cIn);
+		bCharShiftSeq[i] = bShift;
+		
+		//now get the VK_code of the key producing the char
+		szVKeySeq[i]=getVKcode(cIn); //szKeySeqA[i];
+		
+		c=new char(2);
+		sprintf(c, "%s", cIn);
+		t=new wchar_t(2);
+		mbstowcs(t, c, 1);
+
+		DEBUGMSG(1, (L"szVKeySeq[%i] = '%s' (0x%02x) \t bCharShiftSeq[%i] = %02x\n", i, t, (byte)cIn/*szVKeySeq[i]*/, i, bCharShiftSeq[i]));
+	}
+	DEBUGMSG(1, (L"------------ key seq -------------\n"));
+}
+
+int WINAPI WinMain(	HINSTANCE hInstance,
+					HINSTANCE hPrevInstance,
+					LPTSTR    lpCmdLine,
+					int       nCmdShow)
+{
+	MSG      msg      ;  
+	HWND     hwnd     ;   
+	WNDCLASS wndclass ; 
+
+	if (IsIntermec() != 0)
+	{
+		MessageBox(NULL, L"This is not an Intermec! Program execution stopped!", L"Fatal Error", MB_OK | MB_TOPMOST | MB_SETFOREGROUND);
+		return -1;
+	}
+	if (wcsstr(lpCmdLine, L"-writereg") != NULL){
+		wsprintf(szKeySeq, L"*.#");// L"*.#");
+		wcstombs(szKeySeqA, szKeySeq, 10);
+		WriteReg();
+	}
+	//allow only one instance!
+	//obsolete, as hooking itself prevents multiple instances
+/*	HWND hWnd = FindWindow (szAppName, NULL);    
+	if (hWnd) 
+	{        
+		//SetForegroundWindow (hWnd);            
+		return -1;
+	}
+*/
+
+	  wndclass.style         = CS_HREDRAW | CS_VREDRAW  ; 
+	  wndclass.lpfnWndProc   = WndProc ;
+	  wndclass.cbClsExtra    = 0 ;
+	  wndclass.cbWndExtra    = 0 ;
+	  wndclass.hInstance     = hInstance   ;
+	  wndclass.hIcon         = LoadIcon (NULL , L"appicon.ico") ;
+	  wndclass.hCursor       = LoadCursor (NULL , IDC_ARROW)  ; 
+	  wndclass.hbrBackground = (HBRUSH) GetStockObject (GRAY_BRUSH)  ;
+	  wndclass.lpszMenuName  = NULL              ;
+	  wndclass.lpszClassName = szAppName ; 
+
+	  RegisterClass (&wndclass) ;    
+	                                              
+	hwnd = CreateWindow (szAppName , L"KeyToggleBoot" ,   
+			 WS_VISIBLE | WS_CAPTION | WS_SYSMENU | WS_OVERLAPPED,          // Style flags                         
+			 CW_USEDEFAULT,       // x position                         
+			 CW_USEDEFAULT,       // y position                         
+			 CW_USEDEFAULT,       // Initial width                         
+			 CW_USEDEFAULT,       // Initial height                         
+			 NULL,                // Parent                         
+			 NULL,                // Menu, must be null                         
+			 hInstance,           // Application instance                         
+			 NULL);               // Pointer to create
+						  // parameters
+	 if (!IsWindow (hwnd)) 
+		 return 0; // Fail if not created.
+
+	g_hInstance=hInstance;
+	g_hWnd=hwnd;
+	//show a hidden window
+	ShowWindow   (hwnd , SW_HIDE); // nCmdShow) ;  
+	UpdateWindow (hwnd) ;
+
+	//INSTALL the HOOK
+	ReadReg();
+	if (g_HookActivate(g_hInstance))
+	{
+		MessageBeep(MB_OK);
+		//system bar icon
+		//ShowIcon(hwnd, g_hInstance);
+		//TRACE(_T("Hook loaded OK"));
+	}
+	else
+	{
+		MessageBeep(MB_ICONEXCLAMATION);
+		MessageBox(hwnd, L"Could not hook. Already running a copy of KeyToggleBoot? Will exit now.", L"KeyToggleBoot", MB_OK | MB_ICONEXCLAMATION);
+		PostQuitMessage(-1);
+	}
+	//TRACE(_T("Hook did not success"));
+
+	//Notification icon
+	HICON hIcon;
+	hIcon=(HICON) LoadImage (g_hInstance, MAKEINTRESOURCE (IHOOK_STARTED), IMAGE_ICON, 16,16,0);
+	nid.cbSize = sizeof (NOTIFYICONDATA);
+	nid.hWnd = hwnd;
+	nid.uID = 1;
+	nid.uFlags = NIF_ICON | NIF_MESSAGE;
+	// NIF_TIP not supported    
+	nid.uCallbackMessage = MYMSG_TASKBARNOTIFY;
+	nid.hIcon = hIcon;
+	nid.szTip[0] = '\0';
+	BOOL res = Shell_NotifyIcon (NIM_ADD, &nid);
+#ifdef DEBUG
+	if (!res)
+		ShowError(GetLastError());
+#endif
+	
+ 	// TODO: Place code here.
+
+
+	  while (GetMessage (&msg , NULL , 0 , 0))   
+		{
+			if (!IsWindow(g_hWnd_RebootDialog) || !IsDialogMessage(g_hWnd_RebootDialog, &msg)) {
+			  TranslateMessage (&msg) ;         
+			  DispatchMessage  (&msg) ;         
+			}
+		} 
+                                                                              
+    
+	  return msg.wParam ;
+}
+
+                                        
+LONG FAR PASCAL WndProc (HWND hwnd   , UINT message , 
+                         UINT wParam , LONG lParam)                
+                            
+{ 
+
+  switch (message)         
+  {
+	case WM_CREATE:
+		//init event handles
+		handleEventCloseDialog = CreateEvent(NULL, FALSE, FALSE, SHOWDLGEVENTNAME);
+		handleEventEndDlgThread = CreateEvent(NULL, FALSE, FALSE, ENDDLGEVENTNAME);
+		if(handleEventEndDlgThread && handleEventCloseDialog)
+			startDlgThread(hwnd);
+		else
+			DEBUGMSG(1, (L"Could not init named event handles\r\n"));
+
+		return 0;
+		break;
+	case WM_PAINT:
+		PAINTSTRUCT ps;    
+		RECT rect;    
+		HDC hdc;     // Adjust the size of the client rectangle to take into account    
+		// the command bar height.    
+		GetClientRect (hwnd, &rect);    
+		hdc = BeginPaint (hwnd, &ps);     
+		DrawText (hdc, TEXT ("KeyToggleBoot loaded"), -1, &rect,
+			DT_CENTER | DT_VCENTER | DT_SINGLELINE);    
+		EndPaint (hwnd, &ps);     
+		return 0;
+		break;
+	case MYMSG_TASKBARNOTIFY:
+		    switch (lParam) {
+				case WM_LBUTTONUP:
+					//ShowWindow(hwnd, SW_SHOWNORMAL);
+					SetWindowPos(hwnd, HWND_TOPMOST, 0,0,0,0, SWP_NOSIZE | SWP_NOREPOSITION | SWP_SHOWWINDOW);
+					if (MessageBox(hwnd, L"Hook is loaded. End hooking?", szAppName, 
+						MB_YESNO | MB_ICONQUESTION | MB_APPLMODAL | MB_SETFOREGROUND | MB_TOPMOST)==IDYES)
+					{
+						g_HookDeactivate();
+						Shell_NotifyIcon(NIM_DELETE, &nid);
+						PostQuitMessage (0) ; 
+					}
+					ShowWindow(hwnd, SW_HIDE);
+				}
+		return 0;
+		break;
+	case WM_DESTROY:
+		//taskbar system icon
+		//RemoveIcon(hwnd);
+		if(handleEventEndDlgThread!=NULL)
+			PulseEvent(handleEventEndDlgThread); //stop DlgThread
+		MessageBeep(MB_OK);
+		g_HookDeactivate();
+		Shell_NotifyIcon(NIM_DELETE, &nid);
+		PostQuitMessage (0) ; 
+		return 0            ;
+		break;
+	case WM_SHOWMYDIALOG:
+		g_hWnd_RebootDialog = CreateDialog(g_hInstance, MAKEINTRESOURCE (IDD_REBOOTDIALOG), g_hWnd, (DLGPROC) RebootDialogProc);
+		if(g_hWnd_RebootDialog!=NULL){
+			ShowWindow(g_hWnd_RebootDialog, SW_SHOW);
+			DEBUGMSG(1, (L"dialog created\n"));
+			SetWindowPos(g_hWnd_RebootDialog, HWND_TOPMOST, 0,0,0,0, SWP_NOSIZE | SWP_NOMOVE | SWP_SHOWWINDOW);
+		}
+		else
+			DEBUGMSG(1, (L"\n## could not create dialog. LastError=%i\n\n", GetLastError()));
+		return 0;
+		break;
+	case WM_DESTROYMYDIALOG:
+		EndDialog(g_hWnd_RebootDialog, 11);
+		__try{
+			DestroyWindow(g_hWnd_RebootDialog);
+		}
+		__except(EXCEPTION_CONTINUE_EXECUTION){
+		}
+		return 0;
+		break;
+
+  }
+
+  return DefWindowProc (hwnd , message , wParam , lParam) ;
+}
+
+void WriteReg()
+{
+	DWORD rc=0;
+	DWORD dwVal=0;
+	rc = OpenCreateKey(L"Software\\Intermec\\KeyToggleBoot");
+	if (rc != 0)
+		ShowError(rc);
+
+	if (rc=OpenKey(L"Software\\Intermec\\KeyToggleBoot") != 0)
+		ShowError(rc);
+	
+	//timeout
+	dwVal=10;
+	rc = RegWriteDword(L"Timeout", &dwVal);
+	if (rc != 0)
+		ShowError(rc);
+
+	//LedID
+	dwVal=1;
+	rc = RegWriteDword(L"LEDid", &dwVal);
+	if (rc != 0)
+		ShowError(rc);
+
+	//vkey sequence
+	rc=RegWriteStr(L"KeySeq", szKeySeq);
+    if (rc != 0)
+        ShowError(rc);
+
+	//ForbiddenKeys list
+	pForbiddenKeyList=new BYTE(3);
+	pForbiddenKeyList[0]=0x72; //F3 key
+	pForbiddenKeyList[1]=0x73; //F4 key
+	pForbiddenKeyList[2]=0x00; //end marker
+	rc=RegWriteBytes(L"ForbiddenKeys", (BYTE*) pForbiddenKeyList, 2);
+	if(rc != 0){
+		ShowError(rc);
+		pForbiddenKeyList=NULL;
+	}
+	CloseKey();
+}
+
+int ReadReg()
+{
+	//for KeyToggleBoot we need to read the stickyKey to react on
+	//and the timout for the sticky key
+	byte dw=0;
+	DWORD dwVal=0;
+
+	OpenKey(L"Software\\Intermec\\KeyToggleBoot");
+	
+	//read the timeout for the StickyKey
+	if (RegReadDword(L"Timeout", &dwVal)==0)
+	{
+		matchTimeout = (UINT) dwVal * 1000;
+		DEBUGMSG(true,(L"Reading Timeout from REG = OK\n"));
+	}
+	else
+	{
+		matchTimeout = 5 * 1000;
+		DEBUGMSG(true,(L"Reading Timeout from REG = FAILED, assigned 5 seconds\n"));
+	}
+
+    //read LEDid to use for signaling
+    if (RegReadDword(L"LEDid", &dwVal)==0)
+    {
+        LEDid = dwVal;
+        DEBUGMSG(true,(L"Reading LEDid from REG = OK\n"));
+    }
+    else
+    {
+        LEDid = 1;
+        DEBUGMSG(true,(L"Reading LEDid from REG = FAILED, using default LedID\n"));
+    }
+
+	TCHAR szTemp[10];
+    int iSize=RegReadByteSize(L"KeySeq", iSize);
+	int iTableSizeOUT=iSize;
+    if(iSize > 20){ //0x14 = 20 bytes, do we have more than 10 bytes?
+        DEBUGMSG(1, (L"Failed reading KeyTable (iSize>20), using default\n"));
+    }
+    else{
+        if (RegReadStr(L"KeySeq", szTemp)==ERROR_SUCCESS){
+            DEBUGMSG(1, (L"Read KeySeq OK\n"));
+			wcscpy(szKeySeq, szTemp);
+			wcstombs(szKeySeqA, szKeySeq, 10);
+            //memcpy(szKeySeq, bTemp, iSize);
+        }
+        else{
+            DEBUGMSG(1, (L"Failed reading KeySeq, using default\n"));
+        }
+    }
+
+	//convert from ANSI sequence to vkCode + shift
+	initVkCodeSeq();
+
+	iKeyCount=wcslen(szKeySeq);
+
+	//read forbidden key list
+	//first get size of binary key
+	RegReadByteSize(L"ForbiddenKeys", iSize);
+	if (iSize>0){
+		pForbiddenKeyList=new BYTE(iSize + 1); //add one byte for end marker 0x00
+		int rc = RegReadBytes(L"ForbiddenKeys", (BYTE*)pForbiddenKeyList, iSize);
+		if(rc != 0){
+			ShowError(rc);
+			delete(pForbiddenKeyList);
+			pForbiddenKeyList=NULL;
+			DEBUGMSG(1,(L"Reading ForbiddenKeys from REG failed\n"));
+		}
+		else{
+			DEBUGMSG(1,(L"Reading ForbiddenKeys from REG = OK\n"));
+			pForbiddenKeyList[iSize+1]=0x00; //end marker
+		}
+	}
+	else{
+		pForbiddenKeyList=NULL;
+		DEBUGMSG(1,(L"Reading ForbiddenKeys from REG failed\n"));
+	}
+
+	CloseKey();
+	TCHAR str[MAX_PATH];
+//dump pForbiddenKeyList
+#ifdef DEBUG
+	char strA[MAX_PATH]; char strB[MAX_PATH];
+	sprintf(strA, "ForbiddenKeyList: ");
+	int a=0;
+	if(pForbiddenKeyList!=NULL){
+		while (pForbiddenKeyList[a]!=0x00){
+			sprintf(strB, " 0x%02x", pForbiddenKeyList[a]);
+			strcat(strA, strB);
+			a++;
+		};
+	}
+	mbstowcs(str, strA, strlen(strA));
+	str[strlen(strA)]='\0';
+	DEBUGMSG(1, (L"%s\n", str));
+#endif
+	wsprintf(str,L"\nReadReg: Timeout=%i, , LEDid=%i, KeySeq='%s'\n'", matchTimeout, LEDid, szKeySeq);
+	DEBUGMSG(true,(str));
+	return 0;
+}
+
+void ShowIcon(HWND hWnd, HINSTANCE hInst)
+{
+    NOTIFYICONDATA nid;
+
+    int nIconID=1;
+    nid.cbSize = sizeof (NOTIFYICONDATA);
+    nid.hWnd = hWnd;
+    nid.uID = nIconID;
+    nid.uFlags = NIF_ICON | NIF_MESSAGE;   // NIF_TIP not supported
+    nid.uCallbackMessage = MYMSG_TASKBARNOTIFY;
+    nid.hIcon = (HICON)LoadImage (g_hInstance, MAKEINTRESOURCE (ID_ICON), IMAGE_ICON, 16,16,0);
+    nid.szTip[0] = '\0';
+
+    BOOL r = Shell_NotifyIcon (NIM_ADD, &nid);
+
+}
+
+void RemoveIcon(HWND hWnd)
+{
+	NOTIFYICONDATA nid;
+
+    memset (&nid, 0, sizeof nid);
+    nid.cbSize = sizeof (NOTIFYICONDATA);
+    nid.hWnd = hWnd;
+    nid.uID = 1;
+
+    Shell_NotifyIcon (NIM_DELETE, &nid);
+
+}
