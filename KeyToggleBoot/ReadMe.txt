@@ -8,14 +8,28 @@ Define a key sequence to bring up a dialog to enable the user to Shutdown/Reboot
 
 Configuration is done by registry
 {{{
-	REGEDIT4
+				REGEDIT4
 
-	[HKEY_LOCAL_MACHINE\SOFTWARE\Intermec\KeyToggleBoot]
-	"ForbiddenKeys"=hex:\
-		  72,73
-	"LEDid"=dword:00000001
-	"Timeout"=dword:0000000A
-	"KeySeq"="*.#"
+				[HKEY_LOCAL_MACHINE\Software\Intermec\KeyToggleBoot]
+				"ForbiddenKeys"=hex:\
+					  00
+					list of vk_ values of forbidden keys
+				"RebootText"="Neustart"
+					text on the Reboot button
+				"QuestionText"="Sie haben den Reboot-Dialog geöffnet. Was möchten Sie?"
+					text for the message
+				"CancelText"="Abbrechen"
+					text for the cancel button
+				"ShutdownText"="Herunterfahren"
+					text for the shutdown button
+				"SuspendText"="Standby"
+					text for the standby button
+				"KeySeq"="***"
+					char sequence to trigger the app
+				"Timeout"=dword:00000003
+					time allowed to enter char sequence
+				"LEDid"=dword:00000001
+					ID of the LED to toggle when the sequence is triggered
 }}}
 
 == Command Line arguments ==

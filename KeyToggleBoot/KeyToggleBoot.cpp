@@ -4,6 +4,12 @@
 //history
 //version	change
 /*
+  3.3.2		added registry keys
+				RebootExt
+				RebootExtApp
+				RebootExtParms
+			added code to start external app instead of showing internal dialog
+
   3.3.1		changed reboot code:
 			BOOL ResetPocketPC()
 			{
@@ -69,6 +75,12 @@
 #include "keymap.h"	//the char to vkey mapping
 
 #include "registry.h"
+#define REGKEY L"Software\\Intermec\\KeyToggleBoot"
+DWORD regValRebootExt=0;
+TCHAR regValRebootExtParms[MAX_PATH]=L"";
+TCHAR regValRebootExtApp[MAX_PATH]=L"";
+
+#include "ver_info.h"
 
 #define WM_SHOWMYDIALOG WM_USER + 5241
 #define WM_DESTROYMYDIALOG WM_USER + 5242
@@ -83,7 +95,7 @@ HWND g_hWnd_RebootDialog=NULL;
 
 UINT  matchTimeout = 3000;  //if zero, no autofallback
 
-TCHAR szAppName[] = L"KeyToggleBoot v3.0";
+TCHAR szAppName[] = L"KeyToggleBoot v3.3.2";
 TCHAR szKeySeq[10]; //hold a max of ten chars
 char szKeySeqA[10]; //same as char list
 
@@ -381,22 +393,39 @@ __declspec(dllexport) LRESULT CALLBACK g_LLKeyboardHookCallback(
 				if (iMatched == iKeyCount){
 					//show modeless dialog
 					DEBUGMSG(1, (L"FULL MATCH, starting ...\n"));
-
-					//show modeless dialog
-					if(!g_bRebootDialogOpen){
-						PostMessage(g_hWnd, WM_SHOWMYDIALOG, 0, 0);
-						//g_hWnd_RebootDialog = CreateDialog(g_hInstance, MAKEINTRESOURCE (IDD_REBOOTDIALOG), g_hWnd, (DLGPROC) RebootDialogProc);
-						//if(g_hWnd_RebootDialog!=NULL){
-						//	ShowWindow(g_hWnd_RebootDialog, SW_SHOW);
-						//	DEBUGMSG(1, (L"dialog created\n"));
-						//	SetWindowPos(g_hWnd_RebootDialog, HWND_TOPMOST, 0,0,0,0, SWP_NOSIZE | SWP_NOMOVE | SWP_SHOWWINDOW);
-						//}
-						//else
-						//	DEBUGMSG(1, (L"\n## could not create dialog. LastError=%i\n\n", GetLastError()));
+					if(regValRebootExt==0){
+						//show modeless dialog
+						if(!g_bRebootDialogOpen){
+							PostMessage(g_hWnd, WM_SHOWMYDIALOG, 0, 0);
+							//g_hWnd_RebootDialog = CreateDialog(g_hInstance, MAKEINTRESOURCE (IDD_REBOOTDIALOG), g_hWnd, (DLGPROC) RebootDialogProc);
+							//if(g_hWnd_RebootDialog!=NULL){
+							//	ShowWindow(g_hWnd_RebootDialog, SW_SHOW);
+							//	DEBUGMSG(1, (L"dialog created\n"));
+							//	SetWindowPos(g_hWnd_RebootDialog, HWND_TOPMOST, 0,0,0,0, SWP_NOSIZE | SWP_NOMOVE | SWP_SHOWWINDOW);
+							//}
+							//else
+							//	DEBUGMSG(1, (L"\n## could not create dialog. LastError=%i\n\n", GetLastError()));
+						}
+						else
+							DEBUGMSG(1, (L"\n## Reboot dialog already open\n"));
 					}
-					else
-						DEBUGMSG(1, (L"\n## Reboot dialog already open\n"));
-
+					else{
+						//start external app
+						TCHAR str[MAX_PATH];
+						PROCESS_INFORMATION pi;
+						if(CreateProcess(regValRebootExtApp, regValRebootExtParms, NULL, NULL, FALSE, 0, NULL, NULL, NULL, &pi)==0){
+							wsprintf(str, L"CreateProcess ('%s'/'%s') failed with 0x%08x\r\n", regValRebootExtApp, regValRebootExtParms, GetLastError());
+							DEBUGMSG(1,(str));
+							return FALSE;
+						}
+						else{
+							wsprintf(str, L"CreateProcess ('%s'/'%s') OK. pid=0x%08x\r\n", regValRebootExtApp, regValRebootExtParms, pi.dwProcessId);
+							CloseHandle(pi.hThread);
+							CloseHandle(pi.hProcess);
+							DEBUGMSG(1,(str));
+							return TRUE;
+						}
+					}
 					//reset match pos and stop timer
 					DEBUGMSG(1, (L"FULL MATCH: Reset matching\n"));
 					LedOn(LEDid,0);
@@ -426,7 +455,7 @@ BOOL g_HookActivate(HINSTANCE hInstance)
 	UnhookWindowsHookEx	= NULL;
 
 	// Load the core library. If it's not found, you've got CErious issues :-O
-	//TRACE(_T("LoadLibrary(coredll.dll)..."));
+	DEBUGMSG(1,(_T("LoadLibrary(coredll.dll)...")));
 	g_hHookApiDLL = LoadLibrary(_T("coredll.dll"));
 	if(g_hHookApiDLL == NULL) return false;
 	else {
@@ -539,15 +568,19 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 	HWND     hwnd     ;   
 	WNDCLASS wndclass ; 
 
+//	TCHAR szEntry[MAX_PATH], szVersion[MAX_PATH];
+//	myGetVersionInfo(NULL, szEntry, szVersion);
+
 	if (IsIntermec() != 0)
 	{
 		MessageBox(NULL, L"This is not an Intermec! Program execution stopped!", L"Fatal Error", MB_OK | MB_TOPMOST | MB_SETFOREGROUND);
 		return -1;
 	}
 	if (wcsstr(lpCmdLine, L"-writereg") != NULL){
-		wsprintf(szKeySeq, L"*.#");// L"*.#");
+		wsprintf(szKeySeq, L"...");// L"*.#");
 		wcstombs(szKeySeqA, szKeySeq, 10);
 		WriteReg();
+		writeRegDlg();
 	}
 	//allow only one instance!
 	//obsolete, as hooking itself prevents multiple instances
@@ -594,6 +627,7 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 
 	//INSTALL the HOOK
 	ReadReg();
+	//readRegDlg();	//do it here or in dialog init?
 	if (g_HookActivate(g_hInstance))
 	{
 		MessageBeep(MB_OK);
@@ -729,7 +763,7 @@ void WriteReg()
 {
 	DWORD rc=0;
 	DWORD dwVal=0;
-	rc = OpenCreateKey(L"Software\\Intermec\\KeyToggleBoot");
+	rc = OpenCreateKey(REGKEY);
 	if (rc != 0)
 		ShowError(rc);
 
@@ -763,6 +797,18 @@ void WriteReg()
 		ShowError(rc);
 		pForbiddenKeyList=NULL;
 	}
+
+	dwVal=regValRebootExt;
+	rc = RegWriteDword(L"RebootExt", &dwVal);
+    if (rc != 0)
+        ShowError(rc);
+	rc=RegWriteStr(L"RebootExtApp", regValRebootExtApp);
+    if (rc != 0)
+        ShowError(rc);
+	rc=RegWriteStr(L"RebootExtParms", regValRebootExtParms);
+    if (rc != 0)
+        ShowError(rc);
+
 	CloseKey();
 }
 
@@ -773,7 +819,7 @@ int ReadReg()
 	byte dw=0;
 	DWORD dwVal=0;
 
-	OpenKey(L"Software\\Intermec\\KeyToggleBoot");
+	OpenKey(REGKEY);
 	
 	//read the timeout for the StickyKey
 	if (RegReadDword(L"Timeout", &dwVal)==0)
@@ -816,6 +862,26 @@ int ReadReg()
             DEBUGMSG(1, (L"Failed reading KeySeq, using default\n"));
         }
     }
+
+	TCHAR szTemp2[MAX_PATH];
+	if(RegReadDword(L"RebootExt", &dwVal)==ERROR_SUCCESS){
+		DEBUGMSG(1, (L"RebootExt = %i\n", dwVal));
+		regValRebootExt=dwVal;
+		if(regValRebootExt==1){
+			if(RegReadStr(L"RebootExtApp", szTemp2)==ERROR_SUCCESS)
+			{
+				wsprintf(regValRebootExtApp, L"%s", szTemp2);
+				DEBUGMSG(1, (L"Read RebootExtApp ='%s'\n", regValRebootExtApp));
+			}			
+			if(RegReadStr(L"RebootExtApp", szTemp2)==ERROR_SUCCESS)
+			{
+				wsprintf(regValRebootExtApp, L"%s", szTemp2);
+				DEBUGMSG(1, (L"Read RebootExtParms ='%s'\n", regValRebootExtParms));
+			}			
+		}
+	}
+	else
+		DEBUGMSG(1, (L"ReadReg RebootExt failed\n"));
 
 	//convert from ANSI sequence to vkCode + shift
 	initVkCodeSeq();

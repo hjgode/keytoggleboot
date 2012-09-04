@@ -86,9 +86,9 @@ struct stringTable{
 
 stringTable _stringTable;
 
-BOOL readReg(){
+BOOL readRegDlg(){
 	BOOL bRet=TRUE;
-	TCHAR* strVal = new TCHAR(MAX_PATH);
+	TCHAR strVal[MAX_PATH];	//changed in 332
 	if(RegReadStr(L"SuspendText", strVal)==ERROR_SUCCESS){
 		wsprintf(_stringTable.szSuspend, L"%s", strVal);
 	}
@@ -115,11 +115,25 @@ BOOL readReg(){
 	else
 		bRet=FALSE;
 
+	DEBUGMSG(1,(L"readReg (rebootDlg): SuspendText='%s', RebootText='%s', ShutdownText='%s', CancelText='%s', QuestionText='%s'\n",
+		_stringTable.szSuspend,
+		_stringTable.szReboot,
+		_stringTable.szShutdown,
+		_stringTable.szCancel,
+		_stringTable.szQuestion
+		));
 	return bRet;
 }
 
-BOOL writeReg(){
+BOOL writeRegDlg(){
 	BOOL bRet=FALSE;
+	wsprintf(_stringTable.szSuspend, L"Suspend");
+	wsprintf(_stringTable.szReboot, L"Reboot");
+	wsprintf(_stringTable.szSuspend, L"Suspend");
+	wsprintf(_stringTable.szShutdown, L"Shutdown");
+	wsprintf(_stringTable.szCancel, L"Cancel");
+	wsprintf(_stringTable.szQuestion, L"Do you really want to reboot?");
+
 	if(! RegWriteStr(L"SuspendText", _stringTable.szSuspend)==ERROR_SUCCESS)
 		bRet=FALSE;
 	if(! RegWriteStr(L"RebootText", _stringTable.szReboot)==ERROR_SUCCESS)
@@ -163,7 +177,7 @@ BOOL CALLBACK RebootDialogProc (
 				SetDlgItemText(hwndDlg, IDC_DIALOGTEXT, szBuf);
 
 			//try to read strings from registry
-			if(readReg()){
+			if(readRegDlg()){
 				SetDlgItemText(hwndDlg, IDC_BTNWARMBOOT, _stringTable.szReboot);
 				SetDlgItemText(hwndDlg, ID_BTNCANCEL, _stringTable.szCancel);
 				SetDlgItemText(hwndDlg, IDC_BTNSHUTDOWN, _stringTable.szShutdown);
@@ -176,7 +190,7 @@ BOOL CALLBACK RebootDialogProc (
 				GetDlgItemText(hwndDlg, IDC_BTNSHUTDOWN, _stringTable.szShutdown, MAX_PATH);
 				GetDlgItemText(hwndDlg, IDC_BTNSUSPEND, _stringTable.szSuspend, MAX_PATH);
 				GetDlgItemText(hwndDlg, IDC_DIALOGTEXT, _stringTable.szQuestion, MAX_PATH);
-				writeReg();
+				writeRegDlg();
 			}
 		  g_bRebootDialogOpen=true;
 		  g_hWnd_RebootDialog=hwndDlg;
