@@ -23,6 +23,10 @@ INT_PTR CALLBACK	About(HWND, UINT, WPARAM, LPARAM);
 
 #include "registry.h"
 #define REGKEY L"Software\\Intermec\\KeyToggleBoot"
+#define REGNAME_TIMEOUT L"Timeout"
+#define REGNAME_LEDID L"LEDid"
+#define REGNAME_KEYSEQ L"KeySeq"
+#define REGNAME_FORBIDDENKEYS L"ForbiddenKeys"
 
 #define WM_SHOWMYDIALOG WM_USER + 5241
 
