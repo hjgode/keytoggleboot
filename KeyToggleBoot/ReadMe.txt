@@ -42,6 +42,12 @@ registry entries written to the registry
 Tested with 700 color and CN3 / WM5, CN50 / WM 6.1
 
 == History ==
+  3.3.2		added registry keys
+				RebootExt
+				RebootExtApp
+				RebootExtParms
+			added code to start external app instead of showing internal dialog
+
   3.3.1		changed reboot code:
 			BOOL ResetPocketPC()
 			{
