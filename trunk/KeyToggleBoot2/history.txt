@@ -1,13 +1,14 @@
-KeyToggleBoot2
+= KeyToggleBoot2 =
 
 	based on KeyToggleBoot
-
-Usage
-	the tool will issue a warmboot (or, starting with v1.1, an external app)
-	when a sequence of keys is pressed in the right order and time
+	needs RebootDialog.exe in Windows Dir
 	
-Config
+== Usage ==
+	the tool will issue a warmboot dialog when a sequence of keys is pressed in the right order and time
+	
+== Config ==
 	configuration is done using the registry:
+	{{{
 	REGEDIT4
 
 	[HKEY_LOCAL_MACHINE\Software\Intermec\KeyToggleBoot]
@@ -30,9 +31,11 @@ Config
 	"LEDid"=dword:00000001
 							reg_dword, the ID of the LED to light, when the tool is in recognizing mode
 							(user has started to enter a char of the sequence)
+	}}}
 	
-Version
+== Version ==
 	1.0
 		initial release
 	1.01
 		moved reg key used to central place
+		
