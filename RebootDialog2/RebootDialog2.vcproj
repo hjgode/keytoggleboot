@@ -5,6 +5,10 @@
 	Name="RebootDialog2"
 	ProjectGUID="{0AABDCFA-AD92-4491-BF7F-EE131D178599}"
 	RootNamespace="RebootDialog2"
+	SccProjectName="Svn"
+	SccAuxPath="Svn"
+	SccLocalPath="Svn"
+	SccProvider="SubversionScc"
 	Keyword="Win32Proj"
 	TargetFrameworkVersion="131072"
 	>
