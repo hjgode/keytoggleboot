@@ -42,6 +42,11 @@ registry entries written to the registry
 Tested with 700 color and CN3 / WM5, CN50 / WM 6.1
 
 == History ==
+  3.3.4		changed rebootdlg.cpp to close itself if shutdown or reboot button has been tapped
+			fixed logic and moved regValShutdownExt and regValRebootExt logic from hook proc to
+			rebootdlg.cpp
+			added code to read version information from central point at VERSION_INFO resource
+
   3.3.3		added registry keys
 			"ShutdownExt"
 			"ShutdownExtApp"

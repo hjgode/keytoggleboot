@@ -254,14 +254,19 @@ BOOL CALLBACK RebootDialogProc (
 			  DEBUGMSG(1, (L"Warmboot to execute...\n"));
 			  ResetPocketPC();
 			  //EndDialog(hwndDlg, 0);
+			  g_bRebootDialogOpen=false;
+			  g_hWnd_RebootDialog=NULL;
+			  DestroyWindow(hwndDlg);
 			  return TRUE;
-
 			  break;
 
 			case IDC_BTNSHUTDOWN:
 			  DEBUGMSG(1, (L"Shutdown to execute...\n"));
 			  CN50_Shutdown();
 			  //EndDialog(hwndDlg, 0);
+			  g_bRebootDialogOpen=false;
+			  g_hWnd_RebootDialog=NULL;
+			  DestroyWindow(hwndDlg);
 			  return TRUE;
 			  break;
 
