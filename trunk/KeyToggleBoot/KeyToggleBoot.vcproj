@@ -2270,6 +2270,10 @@
 			</File>
 		</Filter>
 		<File
+			RelativePath=".\KeyToggleBoot.reg"
+			>
+		</File>
+		<File
 			RelativePath="ReadMe.txt"
 			>
 		</File>
