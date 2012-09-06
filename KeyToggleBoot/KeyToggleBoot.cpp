@@ -4,6 +4,11 @@
 //history
 //version	change
 /*
+  3.3.3		added registry keys
+				"ShutdownExt"
+				"ShutdownExtApp"
+				"ShutdownExtParms"
+
   3.3.2		added registry keys
 				RebootExt
 				RebootExtApp
@@ -76,9 +81,6 @@
 
 #include "registry.h"
 #define REGKEY L"Software\\Intermec\\KeyToggleBoot"
-DWORD regValRebootExt=0;
-TCHAR regValRebootExtParms[MAX_PATH]=L"";
-TCHAR regValRebootExtApp[MAX_PATH]=L"";
 
 #include "ver_info.h"
 
@@ -86,16 +88,23 @@ TCHAR regValRebootExtApp[MAX_PATH]=L"";
 #define WM_DESTROYMYDIALOG WM_USER + 5242
 
 #include "rebootdlg.h"
+
 extern BOOL g_bRebootDialogOpen;
 HWND g_hWnd_RebootDialog=NULL;
 
-
 /*
 */
+DWORD regValRebootExt=0;
+TCHAR regValRebootExtParms[MAX_PATH]=L"";
+TCHAR regValRebootExtApp[MAX_PATH]=L"";
+
+DWORD regValShutdownExt=0;
+TCHAR regValShutdownExtParms[MAX_PATH]=L"";
+TCHAR regValShutdownExtApp[MAX_PATH]=L"";
 
 UINT  matchTimeout = 3000;  //if zero, no autofallback
 
-TCHAR szAppName[] = L"KeyToggleBoot v3.3.2";
+TCHAR szAppName[] = L"KeyToggleBoot v3.3.3";
 TCHAR szKeySeq[10]; //hold a max of ten chars
 char szKeySeqA[10]; //same as char list
 
@@ -393,7 +402,6 @@ __declspec(dllexport) LRESULT CALLBACK g_LLKeyboardHookCallback(
 				if (iMatched == iKeyCount){
 					//show modeless dialog
 					DEBUGMSG(1, (L"FULL MATCH, starting ...\n"));
-					if(regValRebootExt==0){
 						//show modeless dialog
 						if(!g_bRebootDialogOpen){
 							PostMessage(g_hWnd, WM_SHOWMYDIALOG, 0, 0);
@@ -408,24 +416,6 @@ __declspec(dllexport) LRESULT CALLBACK g_LLKeyboardHookCallback(
 						}
 						else
 							DEBUGMSG(1, (L"\n## Reboot dialog already open\n"));
-					}
-					else{
-						//start external app
-						TCHAR str[MAX_PATH];
-						PROCESS_INFORMATION pi;
-						if(CreateProcess(regValRebootExtApp, regValRebootExtParms, NULL, NULL, FALSE, 0, NULL, NULL, NULL, &pi)==0){
-							wsprintf(str, L"CreateProcess ('%s'/'%s') failed with 0x%08x\r\n", regValRebootExtApp, regValRebootExtParms, GetLastError());
-							DEBUGMSG(1,(str));
-							return FALSE;
-						}
-						else{
-							wsprintf(str, L"CreateProcess ('%s'/'%s') OK. pid=0x%08x\r\n", regValRebootExtApp, regValRebootExtParms, pi.dwProcessId);
-							CloseHandle(pi.hThread);
-							CloseHandle(pi.hProcess);
-							DEBUGMSG(1,(str));
-							return TRUE;
-						}
-					}
 					//reset match pos and stop timer
 					DEBUGMSG(1, (L"FULL MATCH: Reset matching\n"));
 					LedOn(LEDid,0);
@@ -809,6 +799,17 @@ void WriteReg()
     if (rc != 0)
         ShowError(rc);
 
+	dwVal=regValShutdownExt;
+	rc = RegWriteDword(L"ShutdownExt", &dwVal);
+    if (rc != 0)
+        ShowError(rc);
+	rc=RegWriteStr(L"ShutdownExtApp", regValShutdownExtApp);
+    if (rc != 0)
+        ShowError(rc);
+	rc=RegWriteStr(L"ShutdownExtParms", regValShutdownExtParms);
+    if (rc != 0)
+        ShowError(rc);
+
 	CloseKey();
 }
 
@@ -882,6 +883,26 @@ int ReadReg()
 	}
 	else
 		DEBUGMSG(1, (L"ReadReg RebootExt failed\n"));
+
+	wsprintf(szTemp2, L"");
+	if(RegReadDword(L"ShutdownExt", &dwVal)==ERROR_SUCCESS){
+		DEBUGMSG(1, (L"ShutdownExt = %i\n", dwVal));
+		regValShutdownExt=dwVal;
+		if(regValShutdownExt==1){
+			if(RegReadStr(L"ShutdownExtApp", szTemp2)==ERROR_SUCCESS)
+			{
+				wsprintf(regValShutdownExtApp, L"%s", szTemp2);
+				DEBUGMSG(1, (L"Read ShutdownExtApp ='%s'\n", regValShutdownExtApp));
+			}			
+			if(RegReadStr(L"ShutdownExtApp", szTemp2)==ERROR_SUCCESS)
+			{
+				wsprintf(regValShutdownExtApp, L"%s", szTemp2);
+				DEBUGMSG(1, (L"Read ShutdownExtParms ='%s'\n", regValShutdownExtParms));
+			}			
+		}
+	}
+	else
+		DEBUGMSG(1, (L"ReadReg ShutdownExt failed\n"));
 
 	//convert from ANSI sequence to vkCode + shift
 	initVkCodeSeq();

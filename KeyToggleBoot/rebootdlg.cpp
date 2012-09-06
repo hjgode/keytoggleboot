@@ -14,6 +14,15 @@ extern "C" __declspec(dllimport) BOOL KernelIoControl(DWORD dwIoControlCode, LPV
 
 #include "registry.h"
 
+extern DWORD regValRebootExt;
+extern DWORD regValRebootExt;
+extern TCHAR regValRebootExtParms[MAX_PATH];
+extern TCHAR regValRebootExtApp[MAX_PATH];
+
+extern DWORD regValShutdownExt;
+extern TCHAR regValShutdownExtParms[MAX_PATH];
+extern TCHAR regValShutdownExtApp[MAX_PATH];
+
 #define TIMER1 10011
 UINT TimerID=TIMER1;
 void startTimer();
@@ -22,13 +31,50 @@ extern HWND g_hWnd_RebootDialog;
 extern HANDLE handleEventCloseDialog;
 
 void CN50_Shutdown(){
-	KernelIoControl(QC_IOCTL_POWER_DOWN_REQ, NULL, 0, NULL, 0, NULL);
-	SetSystemPowerState(NULL, POWER_STATE_OFF, POWER_FORCE);
+	if(regValShutdownExt==1)
+	{
+		//start external app
+		TCHAR str[MAX_PATH];
+		PROCESS_INFORMATION pi;
+		if(CreateProcess(regValShutdownExtApp, regValShutdownExtParms, NULL, NULL, FALSE, 0, NULL, NULL, NULL, &pi)==0){
+			wsprintf(str, L"CreateProcess ('%s'/'%s') failed with 0x%08x\r\n", regValShutdownExtApp, regValShutdownExtParms, GetLastError());
+			DEBUGMSG(1,(str));
+		}
+		else{
+			wsprintf(str, L"CreateProcess ('%s'/'%s') OK. pid=0x%08x\r\n", regValShutdownExtApp, regValShutdownExtParms, pi.dwProcessId);
+			CloseHandle(pi.hThread);
+			CloseHandle(pi.hProcess);
+			DEBUGMSG(1,(str));
+		}
+	}
+	else{
+		KernelIoControl(QC_IOCTL_POWER_DOWN_REQ, NULL, 0, NULL, 0, NULL);
+		SetSystemPowerState(NULL, POWER_STATE_OFF, POWER_FORCE);
+	}
 }
 
 BOOL ResetPocketPC()
 {
-	SetSystemPowerState(NULL, POWER_STATE_RESET, 0);
+	if(regValRebootExt==0){
+		SetSystemPowerState(NULL, POWER_STATE_RESET, 0);
+	}
+	else{
+		//start external app
+		TCHAR str[MAX_PATH];
+		PROCESS_INFORMATION pi;
+		if(CreateProcess(regValRebootExtApp, regValRebootExtParms, NULL, NULL, FALSE, 0, NULL, NULL, NULL, &pi)==0){
+			wsprintf(str, L"CreateProcess ('%s'/'%s') failed with 0x%08x\r\n", regValRebootExtApp, regValRebootExtParms, GetLastError());
+			DEBUGMSG(1,(str));
+			return FALSE;
+		}
+		else{
+			wsprintf(str, L"CreateProcess ('%s'/'%s') OK. pid=0x%08x\r\n", regValRebootExtApp, regValRebootExtParms, pi.dwProcessId);
+			CloseHandle(pi.hThread);
+			CloseHandle(pi.hProcess);
+			DEBUGMSG(1,(str));
+			return TRUE;
+		}
+	}
 	return 0;
 	//DWORD dwRet=0;
 	//return KernelIoControl(IOCTL_HAL_REBOOT, NULL, 0, NULL, 0, &dwRet);
