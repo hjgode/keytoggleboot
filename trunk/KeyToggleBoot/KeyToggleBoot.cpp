@@ -3,7 +3,13 @@
 
 //history
 //version	change
+
 /*
+  3.3.4		changed rebootdlg.cpp to close itself if shutdown or reboot button has been tapped
+			fixed logic and moved regValShutdownExt and regValRebootExt logic from hook proc to
+			rebootdlg.cpp
+			added code to read version information from central point at VERSION_INFO resource
+
   3.3.3		added registry keys
 				"ShutdownExt"
 				"ShutdownExtApp"
@@ -92,8 +98,6 @@
 extern BOOL g_bRebootDialogOpen;
 HWND g_hWnd_RebootDialog=NULL;
 
-/*
-*/
 DWORD regValRebootExt=0;
 TCHAR regValRebootExtParms[MAX_PATH]=L"";
 TCHAR regValRebootExtApp[MAX_PATH]=L"";
@@ -104,7 +108,7 @@ TCHAR regValShutdownExtApp[MAX_PATH]=L"";
 
 UINT  matchTimeout = 3000;  //if zero, no autofallback
 
-TCHAR szAppName[] = L"KeyToggleBoot v3.3.3";
+TCHAR szAppName[MAX_PATH] = L"KeyToggleBoot v3.3.4";	//will be updated with info from VERSION_INFO
 TCHAR szKeySeq[10]; //hold a max of ten chars
 char szKeySeqA[10]; //same as char list
 
@@ -405,14 +409,6 @@ __declspec(dllexport) LRESULT CALLBACK g_LLKeyboardHookCallback(
 						//show modeless dialog
 						if(!g_bRebootDialogOpen){
 							PostMessage(g_hWnd, WM_SHOWMYDIALOG, 0, 0);
-							//g_hWnd_RebootDialog = CreateDialog(g_hInstance, MAKEINTRESOURCE (IDD_REBOOTDIALOG), g_hWnd, (DLGPROC) RebootDialogProc);
-							//if(g_hWnd_RebootDialog!=NULL){
-							//	ShowWindow(g_hWnd_RebootDialog, SW_SHOW);
-							//	DEBUGMSG(1, (L"dialog created\n"));
-							//	SetWindowPos(g_hWnd_RebootDialog, HWND_TOPMOST, 0,0,0,0, SWP_NOSIZE | SWP_NOMOVE | SWP_SHOWWINDOW);
-							//}
-							//else
-							//	DEBUGMSG(1, (L"\n## could not create dialog. LastError=%i\n\n", GetLastError()));
 						}
 						else
 							DEBUGMSG(1, (L"\n## Reboot dialog already open\n"));
@@ -558,8 +554,13 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 	HWND     hwnd     ;   
 	WNDCLASS wndclass ; 
 
-//	TCHAR szEntry[MAX_PATH], szVersion[MAX_PATH];
-//	myGetVersionInfo(NULL, szEntry, szVersion);
+	//read productversion from resources!
+	TCHAR szVersion[MAX_PATH];
+	TCHAR szProductName[MAX_PATH];
+	myGetFileVersionInfo(NULL, szVersion);
+	myGetFileProductNameInfo(NULL, szProductName);
+	wsprintf(szAppName, L"%s v%s", szProductName, szVersion);
+	DEBUGMSG(1, (L"#### %s START ####\n", szAppName));
 
 	if (IsIntermec() != 0)
 	{
@@ -691,15 +692,16 @@ LONG FAR PASCAL WndProc (HWND hwnd   , UINT message ,
 		// the command bar height.    
 		GetClientRect (hwnd, &rect);    
 		hdc = BeginPaint (hwnd, &ps);     
-		DrawText (hdc, TEXT ("KeyToggleBoot loaded"), -1, &rect,
-			DT_CENTER | DT_VCENTER | DT_SINGLELINE);    
+		DrawText (hdc, szAppName, -1, &rect,
+			DT_CENTER | DT_SINGLELINE);   //| DT_VCENTER  
 		EndPaint (hwnd, &ps);     
 		return 0;
 		break;
 	case MYMSG_TASKBARNOTIFY:
 		    switch (lParam) {
 				case WM_LBUTTONUP:
-					//ShowWindow(hwnd, SW_SHOWNORMAL);
+					ShowWindow(hwnd, SW_SHOWMAXIMIZED);
+					UpdateWindow(hwnd);
 					SetWindowPos(hwnd, HWND_TOPMOST, 0,0,0,0, SWP_NOSIZE | SWP_NOREPOSITION | SWP_SHOWWINDOW);
 					if (MessageBox(hwnd, L"Hook is loaded. End hooking?", szAppName, 
 						MB_YESNO | MB_ICONQUESTION | MB_APPLMODAL | MB_SETFOREGROUND | MB_TOPMOST)==IDYES)
