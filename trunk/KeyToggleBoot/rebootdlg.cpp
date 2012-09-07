@@ -48,7 +48,7 @@ void CN50_Shutdown(){
 			DEBUGMSG(1,(str));
 		}
 	}
-	else{
+	else if(regValShutdownExt==0){
 		KernelIoControl(QC_IOCTL_POWER_DOWN_REQ, NULL, 0, NULL, 0, NULL);
 		SetSystemPowerState(NULL, POWER_STATE_OFF, POWER_FORCE);
 	}
@@ -59,7 +59,7 @@ BOOL ResetPocketPC()
 	if(regValRebootExt==0){
 		SetSystemPowerState(NULL, POWER_STATE_RESET, 0);
 	}
-	else{
+	else if(regValRebootExt==1){
 		//start external app
 		TCHAR str[MAX_PATH];
 		PROCESS_INFORMATION pi;
