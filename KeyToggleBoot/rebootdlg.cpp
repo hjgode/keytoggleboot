@@ -15,7 +15,6 @@ extern "C" __declspec(dllimport) BOOL KernelIoControl(DWORD dwIoControlCode, LPV
 #include "registry.h"
 
 extern DWORD regValRebootExt;
-extern DWORD regValRebootExt;
 extern TCHAR regValRebootExtParms[MAX_PATH];
 extern TCHAR regValRebootExtApp[MAX_PATH];
 
@@ -28,7 +27,7 @@ UINT TimerID=TIMER1;
 void startTimer();
 
 extern HWND g_hWnd_RebootDialog;
-extern HANDLE handleEventCloseDialog;
+extern HANDLE handleEventCloseDialogAndSuspend;
 
 void CN50_Shutdown(){
 	if(regValShutdownExt==1)
@@ -274,7 +273,7 @@ BOOL CALLBACK RebootDialogProc (
 			case IDC_BTNSUSPEND:
 			  DEBUGMSG(1, (L"Suspend to execute...\n"));
 			  //SuspendPPC();
-				PulseEvent(handleEventCloseDialog);
+				PulseEvent(handleEventCloseDialogAndSuspend);
 			  //g_bRebootDialogOpen=false;
 			  //g_hWnd_RebootDialog=NULL;
 
