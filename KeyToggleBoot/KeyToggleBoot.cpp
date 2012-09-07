@@ -2,81 +2,7 @@
 //
 
 //history
-//version	change
-
-/*
-  3.3.4		changed rebootdlg.cpp to close itself if shutdown or reboot button has been tapped
-			fixed logic and moved regValShutdownExt and regValRebootExt logic from hook proc to
-			rebootdlg.cpp
-			added code to read version information from central point at VERSION_INFO resource
-
-  3.3.3		added registry keys
-				"ShutdownExt"
-				"ShutdownExtApp"
-				"ShutdownExtParms"
-
-  3.3.2		added registry keys
-				RebootExt
-				RebootExtApp
-				RebootExtParms
-			added code to start external app instead of showing internal dialog
-
-  3.3.1		changed reboot code:
-			BOOL ResetPocketPC()
-			{
-				SetSystemPowerState(NULL, POWER_STATE_RESET, 0);
-				return 0;
-				//DWORD dwRet=0;
-				//return KernelIoControl(IOCTL_HAL_REBOOT, NULL, 0, NULL, 0, &dwRet);
-			}
-			For whatever reason KernelIOCtl does not work anymore
-
-  3.3.0		added code to read button texts from Registry
-				REGEDIT4
-
-				[HKEY_LOCAL_MACHINE\Software\Intermec\KeyToggleBoot]
-				"ForbiddenKeys"=hex:\
-					  00
-				"RebootText"="Neustart"
-				"QuestionText"="Sie haben den Reboot-Dialog geöffnet. Was möchten Sie?"
-				"CancelText"="Abbrechen"
-				"ShutdownText"="Herunterfahren"
-				"SuspendText"="Standby"
-				"KeySeq"="***"
-				"Timeout"=dword:00000003
-				"LEDid"=dword:00000001
-			font in dialog changed to Tahoma 8pt and resized buttons
-			changed registry.h and splitted to registry.h and cpp
-
-  3.2.0		imported to VS2008 and fixed some pointer bugs
-			added Suspend option
-
-  3.1.1		fixed pForbiddenKeyList size recognition by adding 0x00 as end marker
-			cannot use sizeof(pForbiddenKeyList) as this returns size of pointer
-
-  3.1.0		added ForbiddenKeyList to code and registry
-                [HKEY_LOCAL_MACHINE\Software\Intermec\KeyToggleBoot]
-				"KeySeq"=string:"*.#"
-                "LEDid"=dword:00000001
-                "Timeout"=dword:00000003
-				"ForbiddenKeys"=hex:\
-							72,73
-			ForbiddenKeys is a binary list of byte codes. These byte codes define 
-			the VK values to be catched and consumed by KeyToggleBoot
-			in example, the VK code for F3 and F4 is 0x72 and 0x73. So KeyToggleBoot 
-			will not forward these two keys, neither WM_KEYDOWN nor WM_KEYUP will be
-			send.
-
-  3.0.0		first release of coding to KeyToggleBoot
-			added LEDid code
-			LEDid defines the ID of the LED to use for showing sticky state
-                [HKEY_LOCAL_MACHINE\Software\Intermec\KeyToggleBoot]
-				"KeySeq"=string:"*.#"
-                "LEDid"=dword:00000001
-                "Timeout"=dword:00000003
-
-*/
-//	ReportEvent
+//see Readme.txt
 
 #include "stdafx.h"
 #include "hooks.h"
@@ -97,6 +23,8 @@
 
 extern BOOL g_bRebootDialogOpen;
 HWND g_hWnd_RebootDialog=NULL;
+
+BOOL bShowSuspendButton=FALSE;
 
 DWORD regValRebootExt=0;
 TCHAR regValRebootExtParms[MAX_PATH]=L"";
@@ -866,6 +794,17 @@ int ReadReg()
             DEBUGMSG(1, (L"Failed reading KeySeq, using default\n"));
         }
     }
+
+	//show or hide Shutdown button?
+	//bShowSuspendButton
+	if(RegReadDword(L"ShowSuspendButton", &dwVal)==ERROR_SUCCESS){
+		if(dwVal==1)
+			bShowSuspendButton=TRUE;
+		else
+			bShowSuspendButton=FALSE;
+	}
+	else
+		bShowSuspendButton=FALSE;
 
 	TCHAR szTemp2[MAX_PATH];
 	if(RegReadDword(L"RebootExt", &dwVal)==ERROR_SUCCESS){
