@@ -30,6 +30,25 @@ Configuration is done by registry
 					time allowed to enter char sequence
 				"LEDid"=dword:00000001
 					ID of the LED to toggle when the sequence is triggered
+					
+				"ShutdownExt"=dword:00000001
+					enable extern Shutdown handling
+				"ShutdownExtApp"="\\windows\\iexplore.exe"
+					app to execute for extern shutdown handling
+				"ShutdownExtParms"="http://www.google.com"
+					args for extern shutdown app
+
+				"RebootExt"=dword:00000001
+					enable extern Reboot handling
+				"RebootExtApp"="\\windows\\ctlpnl.exe"
+					app to execute for extern reboot handling
+				"RebootExtParms"="cplmain.cpl 16"
+					args for extern reboot application
+					
+				"ShowSuspendButton"=dword:00000000
+					1 = show Suspend button
+					0 = hide Suspend button (default, also is reg is not found)
+
 }}}
 
 == Command Line arguments ==
@@ -42,6 +61,10 @@ registry entries written to the registry
 Tested with 700 color and CN3 / WM5, CN50 / WM 6.1
 
 == History ==
+  3.3.5		fixed ReadReg for ...Parms reading
+			changed event name and vars for Suspend action
+			added ShowSuspendButton in reg, default is to hide Suspend button
+			
   3.3.4		changed rebootdlg.cpp to close itself if shutdown or reboot button has been tapped
 			fixed logic and moved regValShutdownExt and regValRebootExt logic from hook proc to
 			rebootdlg.cpp
