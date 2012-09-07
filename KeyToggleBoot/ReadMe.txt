@@ -61,7 +61,7 @@ registry entries written to the registry
 Tested with 700 color and CN3 / WM5, CN50 / WM 6.1
 
 == History ==
-  3.3.6		explicit check for 0 or 1 (nothing else matters) in CN50_Shutdown() and ResetPocketPC()
+  3.3.5		explicit check for 0 or 1 (nothing else matters) in CN50_Shutdown() and ResetPocketPC()
   
   3.3.5		fixed ReadReg for ...Parms reading
 			changed event name and vars for Suspend action
