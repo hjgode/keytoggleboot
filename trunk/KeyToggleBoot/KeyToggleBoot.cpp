@@ -165,9 +165,9 @@ BOOL WINAPI NLedSetDevice( UINT nDeviceId, void *pInput );
 };
 
 //trying to create modal dialog in separate thread *START*
-#define SHOWDLGEVENTNAME L"ShowDlgEvent"
+#define CLOSEDLGHANDLEANDSUPSPEND L"CloseDlgAndSuspendEvent"
 #define ENDDLGEVENTNAME  L"EndDialogEvent"
-HANDLE handleEventCloseDialog=NULL;
+HANDLE handleEventCloseDialogAndSuspend=NULL;
 HANDLE handleEventEndDlgThread=NULL;
 HANDLE hDlgThread=NULL;
 DWORD WINAPI dialogThread(LPVOID lpParam){
@@ -177,7 +177,7 @@ DWORD WINAPI dialogThread(LPVOID lpParam){
 	DWORD dwRes=0;
 	HANDLE* pObjects;
 	pObjects=new HANDLE[2];
-	pObjects[0]=handleEventCloseDialog;
+	pObjects[0]=handleEventCloseDialogAndSuspend;
 	pObjects[1]=handleEventEndDlgThread;
 	while(bRun){
 		dwRes = WaitForMultipleObjects(
@@ -190,7 +190,7 @@ DWORD WINAPI dialogThread(LPVOID lpParam){
 				DEBUGMSG(1, (L"dialogThread: WaitMultipleObjects=WAIT_OBJECT_0 + 1\r\n"));
 				bRun=FALSE; //signal exit thread
 				break;
-			case WAIT_OBJECT_0: //used to close the dialog
+			case WAIT_OBJECT_0: //handleEventCloseDialogAndSuspend
 				DEBUGMSG(1, (L"dialogThread: WaitMultipleObjects=WAIT_OBJECT_0\r\n"));
 				if(g_hWnd_RebootDialog!=NULL){
 					PostMessage(hwnd, WM_DESTROYMYDIALOG, 0, 0);
@@ -198,6 +198,7 @@ DWORD WINAPI dialogThread(LPVOID lpParam){
 					//iRet = DestroyWindow(hWndDlg);
 					//DEBUGMSG(1, (L"dialogThread: DestroyWindow return=%i, lastError=%i", iRet, GetLastError()));
 				}
+				SuspendPPC();
 				break;
 			case WAIT_ABANDONED_0:
 				DEBUGMSG(1, (L"dialogThread: WaitMultipleObjects=WAIT_ABANDONED\r\n"));
@@ -676,9 +677,9 @@ LONG FAR PASCAL WndProc (HWND hwnd   , UINT message ,
   {
 	case WM_CREATE:
 		//init event handles
-		handleEventCloseDialog = CreateEvent(NULL, FALSE, FALSE, SHOWDLGEVENTNAME);
+		handleEventCloseDialogAndSuspend = CreateEvent(NULL, FALSE, FALSE, CLOSEDLGHANDLEANDSUPSPEND);
 		handleEventEndDlgThread = CreateEvent(NULL, FALSE, FALSE, ENDDLGEVENTNAME);
-		if(handleEventEndDlgThread && handleEventCloseDialog)
+		if(handleEventEndDlgThread && handleEventCloseDialogAndSuspend)
 			startDlgThread(hwnd);
 		else
 			DEBUGMSG(1, (L"Could not init named event handles\r\n"));
@@ -876,11 +877,16 @@ int ReadReg()
 				wsprintf(regValRebootExtApp, L"%s", szTemp2);
 				DEBUGMSG(1, (L"Read RebootExtApp ='%s'\n", regValRebootExtApp));
 			}			
-			if(RegReadStr(L"RebootExtApp", szTemp2)==ERROR_SUCCESS)
+			else
+				wsprintf(regValRebootExtApp, L"");
+
+			if(RegReadStr(L"RebootExtParms", szTemp2)==ERROR_SUCCESS)
 			{
-				wsprintf(regValRebootExtApp, L"%s", szTemp2);
+				wsprintf(regValRebootExtParms, L"%s", szTemp2);
 				DEBUGMSG(1, (L"Read RebootExtParms ='%s'\n", regValRebootExtParms));
 			}			
+			else
+				wsprintf(regValRebootExtParms, L"");
 		}
 	}
 	else
@@ -896,11 +902,16 @@ int ReadReg()
 				wsprintf(regValShutdownExtApp, L"%s", szTemp2);
 				DEBUGMSG(1, (L"Read ShutdownExtApp ='%s'\n", regValShutdownExtApp));
 			}			
-			if(RegReadStr(L"ShutdownExtApp", szTemp2)==ERROR_SUCCESS)
+			else
+				wsprintf(regValShutdownExtApp, L"");
+
+			if(RegReadStr(L"ShutdownExtParms", szTemp2)==ERROR_SUCCESS)
 			{
-				wsprintf(regValShutdownExtApp, L"%s", szTemp2);
+				wsprintf(regValShutdownExtParms, L"%s", szTemp2);
 				DEBUGMSG(1, (L"Read ShutdownExtParms ='%s'\n", regValShutdownExtParms));
 			}			
+			else
+				wsprintf(regValShutdownExtParms, L"");
 		}
 	}
 	else

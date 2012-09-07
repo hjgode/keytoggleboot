@@ -11,3 +11,4 @@ BOOL CALLBACK RebootDialogProc (
 
 BOOL writeRegDlg();
 BOOL readRegDlg();
+BOOL SuspendPPC();
