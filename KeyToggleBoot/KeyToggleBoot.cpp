@@ -80,6 +80,58 @@ BOOL g_HookActivate(HINSTANCE hInstance);
 void ShowIcon(HWND hWnd, HINSTANCE hInst);
 void RemoveIcon(HWND hWnd);
 
+//################### START beep after idle stuff ############################
+BOOL bStopBeeper=FALSE;
+DWORD threadIdleID=0;
+DWORD WINAPI beeperThread(LPVOID lParam){
+	DEBUGMSG(1, (L"beeperThread entered\n"));
+	do{
+		MessageBeep(MB_ICONASTERISK);
+		Sleep(700);
+		MessageBeep(MB_ICONASTERISK);
+		Sleep(300);
+		MessageBeep(MB_ICONERROR);
+		Sleep(700);
+		MessageBeep(MB_ICONERROR);
+		Sleep(5000);
+	}while(!bStopBeeper);
+	return 0;
+}
+HANDLE hBeeperThread=NULL;
+
+#define IDLETIMER	10010
+UINT idleTimerID=0;
+
+void stopTimer(){
+	DEBUGMSG(1, (L"stopTimer entered\n"));
+	if(idleTimerID==0)
+		return;	//no timer running
+	KillTimer(NULL, idleTimerID);
+	idleTimerID=0;
+}
+
+void CALLBACK idleTimerProc(HWND hwnd, UINT uMsg, UINT idEvent, DWORD dwTime ){
+	DEBUGMSG(1, (L"idletimerproc entered\n"));
+	bStopBeeper=FALSE;
+	CreateThread(NULL, 0, beeperThread, NULL, 0, &threadIdleID);
+	KillTimer(NULL, idleTimerID);
+	idleTimerID=0;
+}
+
+
+#ifdef DEBUG
+	UINT idleTimeout=5; // = 5 sec
+#else
+	UINT idleTimeout=300; //300 sec = 5 min
+#endif
+
+///start a timer with a interval of x seconds
+void startTimer(UINT iTimeOut){
+	DEBUGMSG(1, (L"startTimer entered\n"));
+	idleTimerID = SetTimer(NULL, IDLETIMER, iTimeOut * 1000, idleTimerProc);
+}
+//################### END beep after idle stuff ############################
+
 #pragma data_seg(".HOOKDATA")									//	Shared data (memory) among all instances.
 	HHOOK g_hInstalledLLKBDhook = NULL;						// Handle to low-level keyboard hook
 #pragma data_seg()
@@ -234,6 +286,13 @@ __declspec(dllexport) LRESULT CALLBACK g_LLKeyboardHookCallback(
 	//DWORD vKey;
 	if (nCode == iActOn) 
 	{ 
+		//idle timer reset
+		if(wParam==WM_KEYUP){
+			startTimer(idleTimeout);
+		}else if(wParam==WM_KEYDOWN){
+			stopTimer();
+		}
+
 		if(g_bRebootDialogOpen){
 			return CallNextHookEx(g_hInstalledLLKBDhook, nCode, wParam, lParam);
 		}
@@ -402,6 +461,7 @@ BOOL g_HookActivate(HINSTANCE hInstance)
 		if(UnhookWindowsHookEx == NULL) 
 			return false;
 	}
+	startTimer(idleTimeout);
 	DEBUGMSG(1, (L"g_HookActivate: OK\nEverything loaded OK\n"));
 	return true;
 }
