@@ -245,7 +245,7 @@ __declspec(dllexport) LRESULT CALLBACK g_LLKeyboardHookCallback(
 #ifdef DEBUG
 			if(pkbhData->vkCode==VK_O)
 #else
-			if(pkbhData->vkCode==VK_OFF)
+			if(pkbhData->vkCode==0x73)	//OFF key
 #endif
 				stopBeeper();
 			else

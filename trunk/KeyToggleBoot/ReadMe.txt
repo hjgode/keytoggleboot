@@ -49,6 +49,11 @@ Configuration is done by registry
 					1 = show Suspend button
 					0 = hide Suspend button (default, also is reg is not found)
 
+				"EnableAlarm"=dword:00000000
+					0 = Alarm after idle timeout is disabled (default)
+					1 = Alarm after idle timeout is enabled
+				"IdleTimeout"=dword:0000012c
+					amount of seconds for timeout alarm. default = 300 seconds = 5 minutes
 }}}
 
 == Command Line arguments ==
@@ -61,6 +66,13 @@ registry entries written to the registry
 Tested with 700 color and CN3 / WM5, CN50 / WM 6.1
 
 == History ==
+  3.4.0		added FindMe alarm function
+			if alarm is enabled by registry, the device will issue alarm beeps after the idle 
+			timeout (default 5 minutes). Every key release restarts the idle timeout.
+			If device is on AC power, there will be no alarm, the idle time will simply restart.
+			If alarm is active, only the HangUp (F3, PhoneEnd) key will stop the alarm. Other keys
+			have no effect on the already active alarm.
+			
   3.3.5		explicit check for 0 or 1 (nothing else matters) in CN50_Shutdown() and ResetPocketPC()
   
   3.3.5		fixed ReadReg for ...Parms reading
