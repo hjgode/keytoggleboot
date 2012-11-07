@@ -22,3 +22,6 @@ REGEDIT4
 "LEDid"=dword:00000001
 
 ;"ShowSuspendButton"=dword:00000000
+
+"IdleTimeout"=dword:300
+"EnableAlarm"=dword:0

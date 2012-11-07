@@ -21,6 +21,8 @@
 
 #include "rebootdlg.h"
 
+#include "idleBeeper.h"
+
 extern BOOL g_bRebootDialogOpen;
 HWND g_hWnd_RebootDialog=NULL;
 
@@ -34,9 +36,12 @@ DWORD regValShutdownExt=0;
 TCHAR regValShutdownExtParms[MAX_PATH]=L"";
 TCHAR regValShutdownExtApp[MAX_PATH]=L"";
 
-UINT  matchTimeout = 3000;  //if zero, no autofallback
+DWORD regValEnableAlarm=1;
+DWORD regValIdleTimeout=300;	//seconds of timeout
 
-TCHAR szAppName[MAX_PATH] = L"KeyToggleBoot v3.3.4";	//will be updated with info from VERSION_INFO
+UINT  matchTimeout = 3000;  //ms, if zero, no autofallback
+
+TCHAR szAppName[MAX_PATH] = L"KeyToggleBoot v3.4.0";	//will be updated with info from VERSION_INFO
 TCHAR szKeySeq[10]; //hold a max of ten chars
 char szKeySeqA[10]; //same as char list
 
@@ -80,57 +85,6 @@ BOOL g_HookActivate(HINSTANCE hInstance);
 void ShowIcon(HWND hWnd, HINSTANCE hInst);
 void RemoveIcon(HWND hWnd);
 
-//################### START beep after idle stuff ############################
-BOOL bStopBeeper=FALSE;
-DWORD threadIdleID=0;
-DWORD WINAPI beeperThread(LPVOID lParam){
-	DEBUGMSG(1, (L"beeperThread entered\n"));
-	do{
-		MessageBeep(MB_ICONASTERISK);
-		Sleep(700);
-		MessageBeep(MB_ICONASTERISK);
-		Sleep(300);
-		MessageBeep(MB_ICONERROR);
-		Sleep(700);
-		MessageBeep(MB_ICONERROR);
-		Sleep(5000);
-	}while(!bStopBeeper);
-	return 0;
-}
-HANDLE hBeeperThread=NULL;
-
-#define IDLETIMER	10010
-UINT idleTimerID=0;
-
-void stopTimer(){
-	DEBUGMSG(1, (L"stopTimer entered\n"));
-	if(idleTimerID==0)
-		return;	//no timer running
-	KillTimer(NULL, idleTimerID);
-	idleTimerID=0;
-}
-
-void CALLBACK idleTimerProc(HWND hwnd, UINT uMsg, UINT idEvent, DWORD dwTime ){
-	DEBUGMSG(1, (L"idletimerproc entered\n"));
-	bStopBeeper=FALSE;
-	CreateThread(NULL, 0, beeperThread, NULL, 0, &threadIdleID);
-	KillTimer(NULL, idleTimerID);
-	idleTimerID=0;
-}
-
-
-#ifdef DEBUG
-	UINT idleTimeout=5; // = 5 sec
-#else
-	UINT idleTimeout=300; //300 sec = 5 min
-#endif
-
-///start a timer with a interval of x seconds
-void startTimer(UINT iTimeOut){
-	DEBUGMSG(1, (L"startTimer entered\n"));
-	idleTimerID = SetTimer(NULL, IDLETIMER, iTimeOut * 1000, idleTimerProc);
-}
-//################### END beep after idle stuff ############################
 
 #pragma data_seg(".HOOKDATA")									//	Shared data (memory) among all instances.
 	HHOOK g_hInstalledLLKBDhook = NULL;						// Handle to low-level keyboard hook
@@ -287,11 +241,15 @@ __declspec(dllexport) LRESULT CALLBACK g_LLKeyboardHookCallback(
 	if (nCode == iActOn) 
 	{ 
 		//idle timer reset
-		if(wParam==WM_KEYUP){
-			startTimer(idleTimeout);
-		}else if(wParam==WM_KEYDOWN){
-			stopTimer();
-		}
+		if(wParam==WM_KEYUP)
+#ifdef DEBUG
+			if(pkbhData->vkCode==VK_O)
+#else
+			if(pkbhData->vkCode==VK_OFF)
+#endif
+				stopBeeper();
+			else
+				resetIdleThread();
 
 		if(g_bRebootDialogOpen){
 			return CallNextHookEx(g_hInstalledLLKBDhook, nCode, wParam, lParam);
@@ -461,7 +419,10 @@ BOOL g_HookActivate(HINSTANCE hInstance)
 		if(UnhookWindowsHookEx == NULL) 
 			return false;
 	}
-	startTimer(idleTimeout);
+
+	if(regValEnableAlarm==1)
+		startIdleThread(regValIdleTimeout);
+
 	DEBUGMSG(1, (L"g_HookActivate: OK\nEverything loaded OK\n"));
 	return true;
 }
@@ -801,6 +762,16 @@ void WriteReg()
     if (rc != 0)
         ShowError(rc);
 
+	dwVal=regValEnableAlarm;
+	rc = RegWriteDword(L"EnableAlarm", &dwVal);
+    if (rc != 0)
+        ShowError(rc);
+
+	dwVal=regValIdleTimeout;
+	rc = RegWriteDword(L"IdleTimeout", &dwVal);
+    if (rc != 0)
+        ShowError(rc);
+
 	CloseKey();
 }
 
@@ -865,6 +836,21 @@ int ReadReg()
 	}
 	else
 		bShowSuspendButton=FALSE;
+
+	//alarm enabled?
+	dwVal=regValEnableAlarm;
+	if(RegReadDword(L"EnableAlarm", &dwVal)==ERROR_SUCCESS)
+		regValEnableAlarm=dwVal;
+	else
+		regValEnableAlarm=0;	//default is 0 = no Alarm
+
+	//read beeper alarm idle timeout
+	dwVal=regValIdleTimeout;
+	if(RegReadDword(L"IdleTimeout", &dwVal)==ERROR_SUCCESS){
+		regValIdleTimeout=dwVal;
+	}
+	else
+		regValIdleTimeout=300;	//default is 5 minutes
 
 	TCHAR szTemp2[MAX_PATH];
 	if(RegReadDword(L"RebootExt", &dwVal)==ERROR_SUCCESS){

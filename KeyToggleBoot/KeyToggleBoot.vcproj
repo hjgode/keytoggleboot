@@ -1747,6 +1747,10 @@
 			Filter="cpp;c;cxx;rc;def;r;odl;idl;hpj;bat"
 			>
 			<File
+				RelativePath=".\idleBeeper.cpp"
+				>
+			</File>
+			<File
 				RelativePath="KeyToggleBoot.cpp"
 				>
 				<FileConfiguration
@@ -2219,6 +2223,10 @@
 			Name="Header Files"
 			Filter="h;hpp;hxx;hm;inl"
 			>
+			<File
+				RelativePath=".\idleBeeper.h"
+				>
+			</File>
 			<File
 				RelativePath="keymap.h"
 				>
