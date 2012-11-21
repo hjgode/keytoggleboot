@@ -5,12 +5,19 @@
 #include <itc50.h>
 #pragma comment (lib, "itc50.lib")
 
+#include "idleBeeper.h"
+
 //events to control beeper and idle thread
 //	Idle thread control
 HANDLE	h_resetIdleThread=NULL;	//event handle
 HANDLE	h_stopIdleThread=NULL;	//event handle
 HANDLE	h_IdleThread=NULL;		//thread handle
 DWORD	threadIdleID=0;			//thread ID
+
+//power watch thread
+HANDLE	h_stopPowerThread=NULL;	//event handle to stop power thread
+HANDLE	h_PowerThread=NULL;		//powerthread handle
+DWORD	threadPowerID=0;		//powerthread ID
 
 //	Beeper thread control
 HANDLE	h_stopBeeperThread=NULL;	//event handle
@@ -22,6 +29,20 @@ DWORD	threadBeeperID=0;			//thread ID
 //forward declarations
 DWORD WINAPI beeperThread(LPVOID lParam);
 DWORD WINAPI idleThread(LPVOID lParam);
+
+void logTime(){
+	TCHAR lpTimeStr[32];
+	wsprintf(lpTimeStr, L"");
+	//Read the system time
+	HRESULT res = GetTimeFormat(LOCALE_SYSTEM_DEFAULT,
+							TIME_FORCE24HOURFORMAT,
+							NULL,
+							L"hh:mm:ss",
+							lpTimeStr,
+							sizeof (lpTimeStr ) * sizeof(TCHAR));
+	if(res>0)
+		DEBUGMSG(1, (L"%s ", lpTimeStr));
+}
 
 //
 BOOL isACpower(){
@@ -40,6 +61,41 @@ BOOL isACpower(){
 		return FALSE;
 }
 
+///start a thread to watch for external power changes
+///should reset idle thread to avoid alarm beep
+DWORD WINAPI powerWatchThread(LPVOID lParam){
+	HANDLE waitHandles[1];
+	waitHandles[0]=h_stopPowerThread;
+	BOOL bStopThread=FALSE;
+	DWORD dwTimeout=(DWORD) lParam;
+	DEBUGMSG(1,(L"powerWatchThread starting with %i\n", dwTimeout));
+	do{
+		DWORD dwWait = WaitForMultipleObjects(1, waitHandles, FALSE, dwTimeout);
+		switch(dwWait){
+			case WAIT_OBJECT_0:
+				//stop
+				DEBUGMSG(1,(L"powerWatchThread stop signaled\n"));
+				bStopThread=TRUE;
+				break;
+			case WAIT_TIMEOUT:
+				if(isACpower()){
+					DEBUGMSG(1,(L"powerWatchThread timeout. On AC power: Reset Idle Timer\n"));
+					if(h_BeeperThread)
+						stopBeeper();
+					if(h_IdleThread)
+						resetIdleThread();
+				}
+				else{
+					DEBUGMSG(1,(L"powerWatchThread timeout. NOT on AC power\n"));
+				}
+				break;
+		}
+	}while(!bStopThread);
+	DEBUGMSG(1,(L"powerWatchThread stopped\n"));
+	h_PowerThread=NULL;
+	return 0;
+}
+
 ///start a timer with a interval of x seconds
 void startIdleThread(UINT iTimeOut){
 	DEBUGMSG(1,(L"startIdleThread entered\n"));
@@ -49,20 +105,39 @@ void startIdleThread(UINT iTimeOut){
 	iTimeOut=iTimeOut*1000;	//we need seconds
 #endif
 	//init event HANDLES
-	h_resetIdleThread=CreateEvent(NULL, FALSE, FALSE, L"h_resetIdleThread");
-	h_stopIdleThread=CreateEvent(NULL, FALSE, FALSE, L"h_stopIdleThread");
-	h_stopBeeperThread=CreateEvent(NULL, FALSE, FALSE, L"h_stopBeeperThread");
+	if(!h_resetIdleThread)
+		h_resetIdleThread=CreateEvent(NULL, FALSE, FALSE, L"h_resetIdleThread");
+	if(!h_stopIdleThread)
+		h_stopIdleThread=CreateEvent(NULL, FALSE, FALSE, L"h_stopIdleThread");
+	if(!h_stopBeeperThread)
+		h_stopBeeperThread=CreateEvent(NULL, FALSE, FALSE, L"h_stopBeeperThread");
 
-	h_IdleThread = CreateThread(NULL, 0, idleThread, (LPVOID)iTimeOut, 0, &threadIdleID);
-	DEBUGMSG(1, (L"idle thread started with handle=0x%x\n", h_IdleThread));
+	if(!h_IdleThread){
+		h_IdleThread = CreateThread(NULL, 0, idleThread, (LPVOID)iTimeOut, 0, &threadIdleID);
+		DEBUGMSG(1, (L"idle thread started with handle=0x%x\n", h_IdleThread));
+	}
+
+	//start power watch thread
+	if(!h_stopPowerThread)
+		h_stopPowerThread=CreateEvent(NULL, FALSE, FALSE, L"h_stopPowerThread");
+	DWORD dwPowerTimeout=1000; //check power every 1 second
+	if(!h_PowerThread){
+		h_PowerThread=CreateThread(NULL, 0, powerWatchThread, (LPVOID)dwPowerTimeout, 0, &threadPowerID);
+		DEBUGMSG(1, (L"power thread started with handle=0x%x\n", h_PowerThread));
+	}
 }
 
 
 void stopIdleThread(){
-	DEBUGMSG(1, (L"stopTimer entered\n"));
-	if(h_IdleThread==NULL)	//is thread running
-		return;	//no timer running
-	SetEvent(h_stopIdleThread);	
+	DEBUGMSG(1, (L"stopIdleThread entered\n"));
+	if(h_IdleThread!=NULL)	//is thread running
+		if(h_stopIdleThread)
+			SetEvent(h_stopIdleThread);	//stop timer thread	
+
+	//stop power thread
+	if(h_PowerThread!=NULL)
+		if(h_stopPowerThread)
+			SetEvent(h_stopPowerThread);
 }
 
 void stopBeeper(){
@@ -73,27 +148,13 @@ void stopBeeper(){
 }
 
 void resetIdleThread(){
-	DEBUGMSG(1, (L"resetIdleThread entered\n"));
+	logTime(); DEBUGMSG(1, (L"resetIdleThread entered\n"));
 	if(h_IdleThread==NULL)	//is thread running
 		return;	//no timer running
 	SetEvent(h_resetIdleThread);	
 }
 
-DWORD WINAPI beeperThread(LPVOID lParam){
-	DEBUGMSG(1, (L"beeperThread entered\n"));
-	BOOL bStopThread=FALSE;
-	HANDLE waitHandles[1];
-	waitHandles[0]=h_stopBeeperThread;
-	do{
-		DWORD dwWait = WaitForMultipleObjects(1, waitHandles, FALSE, 5000);
-		switch(dwWait){
-			case WAIT_OBJECT_0:
-				//stop
-				DEBUGMSG(1,(L"beeperThread stop signaled\n"));
-				bStopThread=TRUE;
-				break;
-			case WAIT_TIMEOUT:
-				DEBUGMSG(1,(L"beeperThread timeout. Beeping\n"));
+void doAlarm(){
 				//issue some sound
 #ifdef DEBUG
 				MessageBeep(MB_ICONASTERISK);
@@ -121,6 +182,26 @@ DWORD WINAPI beeperThread(LPVOID lParam){
 					MessageBeep(MB_ICONERROR);
 				}
 #endif
+}
+
+DWORD WINAPI beeperThread(LPVOID lParam){
+	DEBUGMSG(1, (L"beeperThread entered\n"));
+	BOOL bStopThread=FALSE;
+	HANDLE waitHandles[1];
+	waitHandles[0]=h_stopBeeperThread;
+	//issue first alarm
+	doAlarm();
+	do{
+		DWORD dwWait = WaitForMultipleObjects(1, waitHandles, FALSE, 5000);
+		switch(dwWait){
+			case WAIT_OBJECT_0:
+				//stop
+				DEBUGMSG(1,(L"beeperThread stop signaled\n"));
+				bStopThread=TRUE;
+				break;
+			case WAIT_TIMEOUT:
+				logTime(); DEBUGMSG(1,(L"beeperThread timeout. Beeping\n"));
+				doAlarm();
 				break;
 		}
 	}while(!bStopThread);

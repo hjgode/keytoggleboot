@@ -66,6 +66,13 @@ registry entries written to the registry
 Tested with 700 color and CN3 / WM5, CN50 / WM 6.1
 
 == History ==
+  3.4.1		added new thread to watch for AC power (interval 1 second)
+			if AC powered, the beeperThread is stopped and idleThread is reset (starts a new interval)
+			if not AC powered there is no change
+			
+			alarm sound is now issued directly and then each 5 seconds. Before it was issued first 
+			after 5 seconds timeout with interval of 5 seconds
+			
   3.4.0		added FindMe alarm function
 			if alarm is enabled by registry, the device will issue alarm beeps after the idle 
 			timeout (default 5 minutes). Every key release restarts the idle timeout.
