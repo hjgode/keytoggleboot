@@ -41,7 +41,7 @@ DWORD regValIdleTimeout=300;	//seconds of timeout
 
 UINT  matchTimeout = 3000;  //ms, if zero, no autofallback
 
-TCHAR szAppName[MAX_PATH] = L"KeyToggleBoot v3.4.0";	//will be updated with info from VERSION_INFO
+TCHAR szAppName[MAX_PATH] = L"KeyToggleBoot v3.4.1";	//will be updated with info from VERSION_INFO
 TCHAR szKeySeq[10]; //hold a max of ten chars
 char szKeySeqA[10]; //same as char list
 
@@ -604,16 +604,17 @@ int WINAPI WinMain(	HINSTANCE hInstance,
  	// TODO: Place code here.
 
 
-	  while (GetMessage (&msg , NULL , 0 , 0))   
-		{
-			if (!IsWindow(g_hWnd_RebootDialog) || !IsDialogMessage(g_hWnd_RebootDialog, &msg)) {
-			  TranslateMessage (&msg) ;         
-			  DispatchMessage  (&msg) ;         
-			}
-		} 
+	while (GetMessage (&msg , NULL , 0 , 0))   
+	{
+		if (!IsWindow(g_hWnd_RebootDialog) || !IsDialogMessage(g_hWnd_RebootDialog, &msg)) {
+		  TranslateMessage (&msg) ;         
+		  DispatchMessage  (&msg) ;         
+		}
+	} 
                                                                               
-    
-	  return msg.wParam ;
+	stopIdleThread();
+
+	return msg.wParam ;
 }
 
                                         
@@ -672,8 +673,9 @@ LONG FAR PASCAL WndProc (HWND hwnd   , UINT message ,
 		MessageBeep(MB_OK);
 		g_HookDeactivate();
 		Shell_NotifyIcon(NIM_DELETE, &nid);
-		PostQuitMessage (0) ; 
-		return 0            ;
+		
+		PostQuitMessage (0); 
+		return 0;
 		break;
 	case WM_SHOWMYDIALOG:
 		g_hWnd_RebootDialog = CreateDialog(g_hInstance, MAKEINTRESOURCE (IDD_REBOOTDIALOG), g_hWnd, (DLGPROC) RebootDialogProc);
