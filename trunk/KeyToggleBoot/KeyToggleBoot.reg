@@ -25,3 +25,5 @@ REGEDIT4
 
 "IdleTimeout"=dword:300
 "EnableAlarm"=dword:0
+
+"AlarmOffKey"=dword:00000073
