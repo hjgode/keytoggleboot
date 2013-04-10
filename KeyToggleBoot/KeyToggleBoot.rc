@@ -112,8 +112,8 @@ IHOOK_STARTED           ICON                    "ihook_st.ico"
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 3,4,1,0
- PRODUCTVERSION 3,4,1,0
+ FILEVERSION 3,4,2,0
+ PRODUCTVERSION 3,4,2,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -131,12 +131,12 @@ BEGIN
             VALUE "Comments", "Hello Hacker"
             VALUE "CompanyName", "Intermec Technologies GmbH"
             VALUE "FileDescription", "KeyToggleBoot"
-            VALUE "FileVersion", "3, 4, 1, 0"
+            VALUE "FileVersion", "3, 4, 2, 0"
             VALUE "InternalName", "KeyToggleBoot"
             VALUE "LegalCopyright", "Copyright © 2010"
             VALUE "OriginalFilename", "KeyToggleBoot.exe"
             VALUE "ProductName", "KeyToggleBoot"
-            VALUE "ProductVersion", "3, 4, 1, 0"
+            VALUE "ProductVersion", "3, 4, 2, 0"
         END
     END
     BLOCK "VarFileInfo"

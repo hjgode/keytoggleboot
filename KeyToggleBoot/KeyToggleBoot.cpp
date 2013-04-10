@@ -38,10 +38,11 @@ TCHAR regValShutdownExtApp[MAX_PATH]=L"";
 
 DWORD regValEnableAlarm=1;
 DWORD regValIdleTimeout=300;	//seconds of timeout
+DWORD regValAlarmOffKey=0x73;
 
 UINT  matchTimeout = 3000;  //ms, if zero, no autofallback
 
-TCHAR szAppName[MAX_PATH] = L"KeyToggleBoot v3.4.1";	//will be updated with info from VERSION_INFO
+TCHAR szAppName[MAX_PATH] = L"KeyToggleBoot v3.4.2";	//will be updated with info from VERSION_INFO
 TCHAR szKeySeq[10]; //hold a max of ten chars
 char szKeySeqA[10]; //same as char list
 
@@ -245,7 +246,7 @@ __declspec(dllexport) LRESULT CALLBACK g_LLKeyboardHookCallback(
 #ifdef DEBUG
 			if(pkbhData->vkCode==VK_O)
 #else
-			if(pkbhData->vkCode==0x73)	//OFF key
+			if(pkbhData->vkCode==regValAlarmOffKey)// 0x73)	//OFF key
 #endif
 				stopBeeper();
 			else
@@ -853,6 +854,13 @@ int ReadReg()
 	}
 	else
 		regValIdleTimeout=300;	//default is 5 minutes
+
+	//read Allarm Off key
+	dwVal=regValAlarmOffKey;
+	if(RegReadDword(L"AlarmOffKey", &dwVal)==ERROR_SUCCESS)
+		regValAlarmOffKey=dwVal;
+	else
+		regValAlarmOffKey=0x73;	//default is F4 (Phone End key)
 
 	TCHAR szTemp2[MAX_PATH];
 	if(RegReadDword(L"RebootExt", &dwVal)==ERROR_SUCCESS){

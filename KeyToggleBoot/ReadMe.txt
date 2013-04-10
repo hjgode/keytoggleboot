@@ -54,6 +54,8 @@ Configuration is done by registry
 					1 = Alarm after idle timeout is enabled
 				"IdleTimeout"=dword:0000012c
 					amount of seconds for timeout alarm. default = 300 seconds = 5 minutes
+				"AlarmOffKey"=dword:00000073
+					key to shutoff alarm, default 0x73
 }}}
 
 == Command Line arguments ==
