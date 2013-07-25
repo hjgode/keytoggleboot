@@ -37,6 +37,9 @@ Configuration is done by registry
 					app to execute for extern shutdown handling
 				"ShutdownExtParms"="http://www.google.com"
 					args for extern shutdown app
+				"ShowShutdownButton"=dword:00000000
+					1 = show Shutdown button
+					0 = hide Shutdown button (default, also is reg is not found)
 
 				"RebootExt"=dword:00000001
 					enable extern Reboot handling
@@ -67,7 +70,20 @@ registry entries written to the registry
 
 Tested with 700 color and CN3 / WM5, CN50 / WM 6.1
 
+== Debug notes ==
+
+	In DEBUG mode the alarm off key is VK_0
+	AC power is not checked for alarm
+	Idle timeout is fixed to 5 seconds
+	DoAlarm uses simple MessageBeep calls instead of ITC_PlayAudioTone
+
 == History ==
+
+  3.5.0
+			added ShowShutdownButton option
+			added blinking LED on alarm condition, same LED used as for key sequence indicator
+			note: not all LED support blink option!
+			
   3.4.2		added Alarm Off key customizations:
 				"AlarmOffKey"=dword:00000073
 					key to shutoff alarm, default 0x73

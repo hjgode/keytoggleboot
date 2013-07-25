@@ -15,6 +15,7 @@ extern "C" __declspec(dllimport) BOOL KernelIoControl(DWORD dwIoControlCode, LPV
 #include "registry.h"
 
 extern BOOL bShowSuspendButton;
+extern BOOL bShowShutdownButton;
 
 extern DWORD regValRebootExt;
 extern TCHAR regValRebootExtParms[MAX_PATH];
@@ -250,6 +251,16 @@ BOOL CALLBACK RebootDialogProc (
 		  }
 		  else
 			  ShowWindow(hwndButton, SW_HIDE);
+
+		  //show or hide suspend button?
+		  hwndButton = GetDlgItem(hwndDlg, IDC_BTNSHUTDOWN);
+		  if(bShowShutdownButton){
+			  ShowWindow(hwndButton, SW_SHOW);
+		  }
+		  else
+			  ShowWindow(hwndButton, SW_HIDE);
+
+
 		  return TRUE;  
 
 //		case WM_DESTROY:

@@ -7,6 +7,14 @@
 
 #include "idleBeeper.h"
 
+#include "dlg_info.h"
+
+HWND hInfoDlg=NULL;		//dlginfo window handle
+BOOL bInfoDlgVisible=FALSE;	//show/hide DlgInfo
+
+extern int LEDid;		//which LED to use
+extern void LedOn(int id, int onoff); //onoff=0 LED is off, onoff=1 LED is on
+
 //events to control beeper and idle thread
 //	Idle thread control
 HANDLE	h_resetIdleThread=NULL;	//event handle
@@ -46,6 +54,9 @@ void logTime(){
 
 //
 BOOL isACpower(){
+#if DEBUG
+	return FALSE;
+#endif
 	DWORD lpdwLineStatus=0;
 	DWORD lpdwBatteryStatus=0;
 	DWORD lpdwBackupStatus=0;
@@ -125,6 +136,11 @@ void startIdleThread(UINT iTimeOut){
 		h_PowerThread=CreateThread(NULL, 0, powerWatchThread, (LPVOID)dwPowerTimeout, 0, &threadPowerID);
 		DEBUGMSG(1, (L"power thread started with handle=0x%x\n", h_PowerThread));
 	}
+
+	//info dialog???
+	hInfoDlg = createDlgInfo(g_hWnd, L"TEST");
+	if(hInfoDlg)
+		ShowWindow(hInfoDlg, SW_SHOW);
 }
 
 
@@ -155,32 +171,35 @@ void resetIdleThread(){
 }
 
 void doAlarm(){
-				//issue some sound
+	LedOn(LEDid,2); //blink LED
+
+	//issue some sound
 #ifdef DEBUG
-				MessageBeep(MB_ICONASTERISK);
-				Sleep(700);
-				MessageBeep(MB_ICONASTERISK);
-				Sleep(300);
-				MessageBeep(MB_ICONERROR);
-				Sleep(700);
-				MessageBeep(MB_ICONERROR);
+	MessageBeep(MB_ICONASTERISK);
+	Sleep(700);
+	MessageBeep(MB_ICONASTERISK);
+	Sleep(300);
+	MessageBeep(MB_ICONERROR);
+	Sleep(700);
+	MessageBeep(MB_ICONERROR);
 #else
-				if( ITCIsAudioToneSupported() )
-				{
-					HRESULT hr;
-					hr = ITCAudioPlayTone( 2400, 200, ITC_GetToneVolumeVeryLoud() );
-					hr = ITCAudioPlayTone( 1200, 200, ITC_GetToneVolumeVeryLoud() );
-					hr = ITCAudioPlayTone( 2400, 200, ITC_GetToneVolumeVeryLoud() );
-					hr = ITCAudioPlayTone( 0, 1000, 0 );
-					hr = ITCAudioPlayTone( 2400, 200, ITC_GetToneVolumeVeryLoud() );
-					hr = ITCAudioPlayTone( 1200, 200, ITC_GetToneVolumeVeryLoud() );
-					hr = ITCAudioPlayTone( 2400, 200, ITC_GetToneVolumeVeryLoud() );
-				}
-				else{
-					MessageBeep(MB_ICONASTERISK);
-					Sleep(300);
-					MessageBeep(MB_ICONERROR);
-				}
+	if( ITCIsAudioToneSupported() )
+	{
+		HRESULT hr;
+		hr = ITCAudioPlayTone( 2400, 200, ITC_GetToneVolumeVeryLoud() );
+		hr = ITCAudioPlayTone( 1200, 200, ITC_GetToneVolumeVeryLoud() );
+		hr = ITCAudioPlayTone( 2400, 200, ITC_GetToneVolumeVeryLoud() );
+		hr = ITCAudioPlayTone( 0, 1000, 0 );
+		hr = ITCAudioPlayTone( 2400, 200, ITC_GetToneVolumeVeryLoud() );
+		hr = ITCAudioPlayTone( 1200, 200, ITC_GetToneVolumeVeryLoud() );
+		hr = ITCAudioPlayTone( 2400, 200, ITC_GetToneVolumeVeryLoud() );
+	}
+	else{
+		MessageBeep(MB_ICONASTERISK);
+		Sleep(300);
+		MessageBeep(MB_ICONERROR);
+	}
+
 #endif
 }
 
@@ -207,6 +226,7 @@ DWORD WINAPI beeperThread(LPVOID lParam){
 	}while(!bStopThread);
 	DEBUGMSG(1,(L"beeperThread stopped\n"));
 	h_BeeperThread=NULL;
+	LedOn(LEDid, 0);	//shut off blinking LED
 	return 0;
 }
 

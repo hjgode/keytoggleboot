@@ -70,6 +70,42 @@ LANGUAGE LANG_GERMAN, SUBLANG_GERMAN
 #pragma code_page(1252)
 #endif //_WIN32
 
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_DLGINFO DIALOG  0, 0, 127, 91
+STYLE DS_SETFONT | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Dialog"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    PUSHBUTTON      "OK",ID_BUTTON1,7,49,112,14
+    PUSHBUTTON      "Cancel",ID_BUTTON2,7,68,112,14
+    CTEXT           "IDLE timer has been elapsed!",IDC_STATIC,7,7,112,10
+    EDITTEXT        IDC_EDIT1,7,22,112,14,ES_AUTOHSCROLL | ES_READONLY
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO 
+BEGIN
+    IDD_DLGINFO, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 119
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 82
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+
 #ifdef APSTUDIO_INVOKED
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -112,8 +148,8 @@ IHOOK_STARTED           ICON                    "ihook_st.ico"
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 3,4,2,0
- PRODUCTVERSION 3,4,2,0
+ FILEVERSION 3,5,0,0
+ PRODUCTVERSION 3,5,0,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -131,12 +167,12 @@ BEGIN
             VALUE "Comments", "Hello Hacker"
             VALUE "CompanyName", "Intermec Technologies GmbH"
             VALUE "FileDescription", "KeyToggleBoot"
-            VALUE "FileVersion", "3, 4, 2, 0"
+            VALUE "FileVersion", "3, 5, 0, 0"
             VALUE "InternalName", "KeyToggleBoot"
             VALUE "LegalCopyright", "Copyright © 2010"
             VALUE "OriginalFilename", "KeyToggleBoot.exe"
             VALUE "ProductName", "KeyToggleBoot"
-            VALUE "ProductVersion", "3, 4, 2, 0"
+            VALUE "ProductVersion", "3, 5, 0, 0"
         END
     END
     BLOCK "VarFileInfo"

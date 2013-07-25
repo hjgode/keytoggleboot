@@ -23,10 +23,13 @@
 
 #include "idleBeeper.h"
 
+extern HWND g_hDlgInfo;
+
 extern BOOL g_bRebootDialogOpen;
 HWND g_hWnd_RebootDialog=NULL;
 
 BOOL bShowSuspendButton=FALSE;
+BOOL bShowShutdownButton=FALSE;
 
 DWORD regValRebootExt=0;
 TCHAR regValRebootExtParms[MAX_PATH]=L"";
@@ -161,7 +164,7 @@ int startDlgThread(HWND hwnd){
 //trying to create modal dialog in separate thread *END*
 
 //control the LEDs
-void LedOn(int id, int onoff) //onoff=0 LED is off, onoff=1 LED is on
+void LedOn(int id, int onoff) //onoff=0 LED is off, onoff=1 LED is on, onoff=2 LED blink
 {
 	TCHAR str[MAX_PATH];
 	wsprintf(str,L"Trying to set LED with ID=%i to state=%i\n", id, onoff);
@@ -421,9 +424,6 @@ BOOL g_HookActivate(HINSTANCE hInstance)
 			return false;
 	}
 
-	if(regValEnableAlarm==1)
-		startIdleThread(regValIdleTimeout);
-
 	DEBUGMSG(1, (L"g_HookActivate: OK\nEverything loaded OK\n"));
 	return true;
 }
@@ -581,9 +581,14 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 	{
 		MessageBeep(MB_ICONEXCLAMATION);
 		MessageBox(hwnd, L"Could not hook. Already running a copy of KeyToggleBoot? Will exit now.", L"KeyToggleBoot", MB_OK | MB_ICONEXCLAMATION);
+		//TRACE(_T("Hook did not success"));
 		PostQuitMessage(-1);
 	}
-	//TRACE(_T("Hook did not success"));
+
+	//start the idle alarm thread
+	if(regValEnableAlarm==1)
+		startIdleThread(regValIdleTimeout);
+
 
 	//Notification icon
 	HICON hIcon;
@@ -675,6 +680,8 @@ LONG FAR PASCAL WndProc (HWND hwnd   , UINT message ,
 		g_HookDeactivate();
 		Shell_NotifyIcon(NIM_DELETE, &nid);
 		
+		if(g_hDlgInfo)
+			DestroyWindow(g_hDlgInfo);
 		PostQuitMessage (0); 
 		return 0;
 		break;
@@ -775,6 +782,16 @@ void WriteReg()
     if (rc != 0)
         ShowError(rc);
 
+	dwVal=bShowShutdownButton;
+	rc = RegWriteDword(L"ShowShutdownButton", &dwVal);
+    if (rc != 0)
+        ShowError(rc);
+
+	dwVal=bShowSuspendButton;
+	rc = RegWriteDword(L"ShowSuspendButton", &dwVal);
+    if (rc != 0)
+        ShowError(rc);
+
 	CloseKey();
 }
 
@@ -830,6 +847,16 @@ int ReadReg()
     }
 
 	//show or hide Shutdown button?
+	if(RegReadDword(L"ShowShutdownButton", &dwVal)==ERROR_SUCCESS){
+		if(dwVal==1)
+			bShowShutdownButton=TRUE;
+		else
+			bShowShutdownButton=FALSE;
+	}
+	else
+		bShowSuspendButton=FALSE;
+
+	//show or hide Suspend button?
 	//bShowSuspendButton
 	if(RegReadDword(L"ShowSuspendButton", &dwVal)==ERROR_SUCCESS){
 		if(dwVal==1)
