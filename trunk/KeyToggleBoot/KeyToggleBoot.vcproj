@@ -1747,6 +1747,10 @@
 			Filter="cpp;c;cxx;rc;def;r;odl;idl;hpj;bat"
 			>
 			<File
+				RelativePath=".\dlg_info.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\idleBeeper.cpp"
 				>
 			</File>
@@ -2223,6 +2227,10 @@
 			Name="Header Files"
 			Filter="h;hpp;hxx;hm;inl"
 			>
+			<File
+				RelativePath=".\dlg_info.h"
+				>
+			</File>
 			<File
 				RelativePath=".\idleBeeper.h"
 				>
