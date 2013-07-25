@@ -68,6 +68,10 @@ registry entries written to the registry
 Tested with 700 color and CN3 / WM5, CN50 / WM 6.1
 
 == History ==
+  3.4.2		added Alarm Off key customizations:
+				"AlarmOffKey"=dword:00000073
+					key to shutoff alarm, default 0x73
+                                        
   3.4.1		added new thread to watch for AC power (interval 1 second)
 			if AC powered, the beeperThread is stopped and idleThread is reset (starts a new interval)
 			if not AC powered there is no change
