@@ -8,9 +8,8 @@
 #include "idleBeeper.h"
 
 #include "dlg_info.h"
-
-HWND hInfoDlg=NULL;		//dlginfo window handle
-BOOL bInfoDlgVisible=FALSE;	//show/hide DlgInfo
+//extern BOOL bInfoDlgVisible;	//show/hide DlgInfo
+extern DWORD regValEnableInfo;
 
 extern int LEDid;		//which LED to use
 extern void LedOn(int id, int onoff); //onoff=0 LED is off, onoff=1 LED is on
@@ -137,10 +136,6 @@ void startIdleThread(UINT iTimeOut){
 		DEBUGMSG(1, (L"power thread started with handle=0x%x\n", h_PowerThread));
 	}
 
-	//info dialog???
-	hInfoDlg = createDlgInfo(g_hWnd, L"TEST");
-	if(hInfoDlg)
-		ShowWindow(hInfoDlg, SW_SHOW);
 }
 
 
@@ -161,6 +156,9 @@ void stopBeeper(){
 	if(h_BeeperThread==NULL)	//is thread running
 		return;	//no timer running
 	SetEvent(h_stopBeeperThread);	
+
+	if(g_hDlgInfo && bInfoDlgVisible)
+		ShowWindow(g_hDlgInfo, SW_HIDE);
 }
 
 void resetIdleThread(){
@@ -172,6 +170,11 @@ void resetIdleThread(){
 
 void doAlarm(){
 	LedOn(LEDid,2); //blink LED
+
+	if(g_hDlgInfo && bInfoDlgVisible){
+		SetWindowPos(g_hDlgInfo, HWND_TOPMOST, 0,0,0,0, SWP_NOSIZE | SWP_NOMOVE | SWP_SHOWWINDOW);
+		//ShowWindow(g_hDlgInfo, SW_SHOW);
+	}
 
 	//issue some sound
 #ifdef DEBUG
@@ -208,6 +211,7 @@ DWORD WINAPI beeperThread(LPVOID lParam){
 	BOOL bStopThread=FALSE;
 	HANDLE waitHandles[1];
 	waitHandles[0]=h_stopBeeperThread;
+	bInfoDlgVisible=regValEnableInfo;	//reset info dlg setting, possibly override by Dismiss button
 	//issue first alarm
 	doAlarm();
 	do{

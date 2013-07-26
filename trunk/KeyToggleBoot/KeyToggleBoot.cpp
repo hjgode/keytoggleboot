@@ -23,7 +23,8 @@
 
 #include "idleBeeper.h"
 
-extern HWND g_hDlgInfo;
+#include "dlg_info.h"
+//extern HWND g_hDlgInfo;	//handle to info dialog window
 
 extern BOOL g_bRebootDialogOpen;
 HWND g_hWnd_RebootDialog=NULL;
@@ -43,9 +44,14 @@ DWORD regValEnableAlarm=1;
 DWORD regValIdleTimeout=300;	//seconds of timeout
 DWORD regValAlarmOffKey=0x73;
 
+DWORD regValEnableInfo=1;
+TCHAR regVal_InfoText[MAX_PATH]=L"Idle time elapsed alarm!";
+TCHAR regVal_InfoButton1[MAX_PATH]=L"Snooze";
+TCHAR regVal_InfoButton2[MAX_PATH]=L"Dismiss";
+
 UINT  matchTimeout = 3000;  //ms, if zero, no autofallback
 
-TCHAR szAppName[MAX_PATH] = L"KeyToggleBoot v3.4.2";	//will be updated with info from VERSION_INFO
+TCHAR szAppName[MAX_PATH] = L"KeyToggleBoot v3.5.0";	//will be updated with info from VERSION_INFO
 TCHAR szKeySeq[10]; //hold a max of ten chars
 char szKeySeqA[10]; //same as char list
 
@@ -247,7 +253,7 @@ __declspec(dllexport) LRESULT CALLBACK g_LLKeyboardHookCallback(
 		//idle timer reset
 		if(wParam==WM_KEYUP)
 #ifdef DEBUG
-			if(pkbhData->vkCode==VK_O)
+			if(pkbhData->vkCode==VK_O || pkbhData->vkCode==VK_0 )
 #else
 			if(pkbhData->vkCode==regValAlarmOffKey)// 0x73)	//OFF key
 #endif
@@ -609,10 +615,15 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 	
  	// TODO: Place code here.
 
+	//info dialog creation
+	bInfoDlgVisible=regValEnableInfo;
+	g_hDlgInfo = createDlgInfo(g_hWnd, regVal_InfoText, regVal_InfoButton1, regVal_InfoButton2);
 
 	while (GetMessage (&msg , NULL , 0 , 0))   
 	{
-		if (!IsWindow(g_hWnd_RebootDialog) || !IsDialogMessage(g_hWnd_RebootDialog, &msg)) {
+		if ( (!IsWindow(g_hWnd_RebootDialog) || !IsDialogMessage(g_hWnd_RebootDialog, &msg)) ||
+			 (!IsWindow(g_hDlgInfo) || !IsDialogMessage(g_hDlgInfo, &msg))
+			) {
 		  TranslateMessage (&msg) ;         
 		  DispatchMessage  (&msg) ;         
 		}
@@ -777,6 +788,27 @@ void WriteReg()
     if (rc != 0)
         ShowError(rc);
 
+	dwVal=regValAlarmOffKey;
+	rc = RegWriteDword(L"AlarmOffKey", &dwVal);
+    if (rc != 0)
+        ShowError(rc);
+
+	//####### info dialog values
+	dwVal=regValEnableInfo;
+	rc = RegWriteDword(L"InfoEnabled", &dwVal);
+    if (rc != 0)
+        ShowError(rc);
+	rc=RegWriteStr(L"InfoButton1", regVal_InfoButton1);
+    if (rc != 0)
+        ShowError(rc);
+	rc=RegWriteStr(L"InfoButton2", regVal_InfoButton2);
+    if (rc != 0)
+        ShowError(rc);
+	rc=RegWriteStr(L"InfoText", regVal_InfoText);
+    if (rc != 0)
+        ShowError(rc);
+
+	//#########################
 	dwVal=regValIdleTimeout;
 	rc = RegWriteDword(L"IdleTimeout", &dwVal);
     if (rc != 0)
@@ -939,6 +971,40 @@ int ReadReg()
 	else
 		DEBUGMSG(1, (L"ReadReg ShutdownExt failed\n"));
 
+	//### INFO dialog strings etc ###
+	if(RegReadDword(L"InfoEnabled", &dwVal)==ERROR_SUCCESS){
+		regValEnableInfo=dwVal;
+	}
+	else
+		regValEnableInfo=TRUE;
+	//info text
+	wsprintf(szTemp2, L"");
+	if(RegReadStr(L"InfoText", szTemp2)==ERROR_SUCCESS)
+	{
+		wsprintf(regVal_InfoText, L"%s", szTemp2);
+		DEBUGMSG(1, (L"Read TextInfo ='%s'\n", regVal_InfoText));
+	}			
+	else
+		wsprintf(regVal_InfoText, L"Idle time elapsed alarm!");
+	//button1
+	wsprintf(szTemp2, L"");
+	if(RegReadStr(L"InfoButton1", szTemp2)==ERROR_SUCCESS)
+	{
+		wsprintf(regVal_InfoButton1, L"%s", szTemp2);
+		DEBUGMSG(1, (L"Read InfoButton1 ='%s'\n", regVal_InfoButton1));
+	}			
+	else
+		wsprintf(regVal_InfoButton1, L"Snooze");
+	//button2
+	wsprintf(szTemp2, L"");
+	if(RegReadStr(L"InfoButton2", szTemp2)==ERROR_SUCCESS)
+	{
+		wsprintf(regVal_InfoButton2, L"%s", szTemp2);
+		DEBUGMSG(1, (L"Read InfoButton2 ='%s'\n", regVal_InfoButton2));
+	}			
+	else
+		wsprintf(regVal_InfoButton2, L"Dismiss");
+
 	//convert from ANSI sequence to vkCode + shift
 	initVkCodeSeq();
 
@@ -967,7 +1033,9 @@ int ReadReg()
 	}
 
 	CloseKey();
+
 	TCHAR str[MAX_PATH];
+
 //dump pForbiddenKeyList
 #ifdef DEBUG
 	char strA[MAX_PATH]; char strB[MAX_PATH];
@@ -984,6 +1052,7 @@ int ReadReg()
 	str[strlen(strA)]='\0';
 	DEBUGMSG(1, (L"%s\n", str));
 #endif
+
 	wsprintf(str,L"\nReadReg: Timeout=%i, , LEDid=%i, KeySeq='%s'\n'", matchTimeout, LEDid, szKeySeq);
 	DEBUGMSG(true,(str));
 	return 0;

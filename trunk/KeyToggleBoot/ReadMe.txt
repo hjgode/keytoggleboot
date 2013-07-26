@@ -25,11 +25,14 @@ Configuration is done by registry
 				"SuspendText"="Standby"
 					text for the standby button
 				"KeySeq"="***"
-					char sequence to trigger the app
+					char sequence to trigger the app, default="..."
 				"Timeout"=dword:00000003
 					time allowed to enter char sequence
 				"LEDid"=dword:00000001
-					ID of the LED to toggle when the sequence is triggered
+					ID of the LED to blink when the sequence is triggered, not all LED IDs support blinking!
+					use 0 on CN51	(left yellow LED)
+					use 1 on CN50
+					default=1 !
 					
 				"ShutdownExt"=dword:00000001
 					enable extern Shutdown handling
@@ -59,6 +62,15 @@ Configuration is done by registry
 					amount of seconds for timeout alarm. default = 300 seconds = 5 minutes
 				"AlarmOffKey"=dword:00000073
 					key to shutoff alarm, default 0x73
+				
+				"InfoEnabled"=dword:00000001
+					show/supress info dialog, default=1
+				"InfoText"="Idle time elapsed alarm!"
+				"InfoButton1"="Snooze"
+					this button will reset the idle timer
+				"InfoButton2"="Dismiss"
+					this button will hide the info dialog until next alarm
+
 }}}
 
 == Command Line arguments ==
@@ -83,6 +95,12 @@ Tested with 700 color and CN3 / WM5, CN50 / WM 6.1
 			added ShowShutdownButton option
 			added blinking LED on alarm condition, same LED used as for key sequence indicator
 			note: not all LED support blink option!
+			
+			new info dialog, registry options
+			InfoEnabled		DWORD	1							show/supress info dialog
+			InfoText		text	"Idle time elapsed alarm!"
+			InfoButton1		text	"Snooze"					this button will reset the idle timer
+			InfoButton2		text	"Dismiss"					this button will hide the info dialog until next alarm
 			
   3.4.2		added Alarm Off key customizations:
 				"AlarmOffKey"=dword:00000073
