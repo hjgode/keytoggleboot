@@ -13,7 +13,8 @@ Configuration is done by registry
 				[HKEY_LOCAL_MACHINE\Software\Intermec\KeyToggleBoot]
 				"ForbiddenKeys"=hex:\
 					  00
-					list of vk_ values of forbidden keys
+					list of vk_ values of forbidden keys, these key values are not forwarded from the hook
+					
 				"RebootText"="Neustart"
 					text on the Reboot button
 				"QuestionText"="Sie haben den Reboot-Dialog geöffnet. Was möchten Sie?"
