@@ -27,7 +27,8 @@
 	...
 */
 
+HWND createDlgInfo(HWND hwnd, TCHAR* szMsg, TCHAR* szButton1, TCHAR* szButton2);
 extern HWND g_hDlgInfo;
-HWND createDlgInfo(HWND hwnd, TCHAR* szMsg);
+extern BOOL bInfoDlgVisible;	//show/hide DlgInfo
 
 #endif
