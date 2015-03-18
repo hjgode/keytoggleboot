@@ -1,0 +1,1 @@
+If a key sequence is pressed in the right order and time, the tool will issue a warmboot or start an external program.
